@@ -5,11 +5,14 @@ import (
 	"os"
 	"bufio"
 	"strings"
+	"net/http"
+	"net/url"
 	"github.com/urfave/cli"
 )
 
 func main() {
 	var useREPL bool
+	var host string
 	activeREPL := false
 	reader := bufio.NewReader(os.Stdin)
 	app := cli.NewApp()
@@ -45,14 +48,26 @@ func main() {
 					fmt.Printf("Expected a host argument.");
 				} else {
 					// print info for debugging
-					fmt.Println("host: ", c.Args().First());
-					fmt.Println("user: ", c.String("user"));
-					fmt.Println("pass: ", c.String("pass"));
+					host = c.Args().First()
+					user := c.String("user")
+					pass := c.String("pass")
+					fmt.Println("host: ", host)
+					fmt.Println("user: ", user)
+					fmt.Println("pass: ", pass)
+
+					resp, err := http.PostForm(host + "/auth",
+						url.Values{"username": {user}, "password": {pass}})
+
+					if (err != nil) {
+						fmt.Println("ERR: ", err)
+						host = ""
+					} else {
+						fmt.Println("RESP: ", resp)
+					}
 				}
 				
 				// always use repl once we connect
-				useREPL = true
-				if (!activeREPL) {
+				if (!activeREPL && (host != "")) {
 					c.App.Run([]string{os.Args[0], "repl"})
 				}
 				return nil
@@ -71,7 +86,7 @@ func main() {
 				activeREPL = true
 
 				// REPL
-				fmt.Println("APIator REPL: Type 'exit' when done")
+				fmt.Println("APIator REPL - Type 'exit' when done")
 				cont := true
 				for (cont) {
 					fmt.Print(">>> ");
@@ -86,6 +101,34 @@ func main() {
 
 				// done
 				activeREPL = false;
+				return nil
+			},
+		},
+		// GET
+		{
+			Name: "get",
+			Usage: "Performs a GET request at the specified location",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name: "not-relative",
+					Usage: "Don't treat the location as a relative path",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				where := c.Args().First()
+				if (!c.Bool("not-relative")) {
+					where = host + where
+				}
+				fmt.Println("GET: ", where)
+				resp, err := http.Get(where)
+
+				if (err != nil) {
+					fmt.Println("ERR: ", err)
+					host = ""
+				} else {
+					fmt.Println("RESP: ", resp)
+				}
+
 				return nil
 			},
 		},
