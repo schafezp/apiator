@@ -6,6 +6,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/couchbase/gocb.v1"
 	"github.com/go-redis/redis"
+	"net/http"
+	"io/ioutil"
+	
 )
 
 type Login struct {
@@ -35,7 +38,6 @@ func PingRedis() (string,error){
 	// Output: PONG <nil>
 }
 
-
 func main() {
 	var cluster *gocb.Cluster
 	var bucket *gocb.Bucket
@@ -55,6 +57,19 @@ func main() {
 		c.JSON(200, gin.H{
 			"redis-err": err,
 			"redis-message": pong,
+		})
+	})
+	r.GET("/solrping", func(c *gin.Context) {
+		resp, err := http.Get("http://apiator-2.csse.rose-hulman.edu:8983/solr/test/admin/ping")
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		fmt.Println("get:\n", string(body))
+
+		c.JSON(200, gin.H{
+			"solr-message": string(body),
 		})
 	})
         r.POST("/auth", func(c *gin.Context) {
