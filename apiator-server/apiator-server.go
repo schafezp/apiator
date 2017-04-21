@@ -5,6 +5,7 @@ import (
 	"gopkg.in/gin-gonic/gin.v1"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/couchbase/gocb.v1"
+	"github.com/go-redis/redis"
 )
 
 type Login struct {
@@ -21,6 +22,19 @@ func CheckPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
 }
+func PingRedis() (string,error){
+	client := redis.NewClient(&redis.Options{
+		Addr:     "apiator-3.csse.rose-hulman.edu:6379",
+		Password: "AK1lTOuHyUNT5sN4JHP7", 
+		DB:       0,  // use default DB
+	})
+
+	pong, err := client.Ping().Result()
+	return pong, err
+	// fmt.Println(pong, err)
+	// Output: PONG <nil>
+}
+
 
 func main() {
 	var cluster *gocb.Cluster
@@ -34,6 +48,13 @@ func main() {
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
+		})
+	})
+	r.GET("/redisping", func(c *gin.Context) {
+		var pong,err = PingRedis()
+		c.JSON(200, gin.H{
+			"redis-err": err,
+			"redis-message": pong,
 		})
 	})
         r.POST("/auth", func(c *gin.Context) {
