@@ -5,10 +5,16 @@ import (
 	"gopkg.in/gin-gonic/gin.v1"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/couchbase/gocb.v1"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/go-redis/redis"
+	"time"
 	"net/http"
+	"strings"
 	"io/ioutil"
-	
+)
+
+var (
+	jwtSecret  = []byte("KHOzH8DJRHIPfC9Mq8yH")
 )
 
 type Login struct {
@@ -25,6 +31,44 @@ func CheckPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
 }
+
+func createJwtToken(user string) (string, error) {
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user": user,
+		"exp": time.Now().Add(time.Minute).Format(time.RFC3339),
+	}).SignedString(jwtSecret)
+}
+
+func decodeAuthUserOrFail(req *http.Request) bool {
+	authHeader := req.Header.Get("Authorization")
+	authHeaderParts := strings.SplitN(authHeader, " ", 2)
+	if authHeaderParts[0] != "Bearer" {
+		return false
+	}
+
+	authToken := authHeaderParts[1]
+	token, err := jwt.Parse(authToken, func(token *jwt.Token) (interface{}, error) {
+		// Don't forget to validate the alg is what you expect:
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
+
+		return jwtSecret, nil
+	})
+	if err != nil {
+		return false
+	}
+
+	authUser := token.Claims.(jwt.MapClaims)["user"].(string)
+	expiry := token.Claims.(jwt.MapClaims)["exp"].(string)
+	expTime, _ := time.Parse(time.RFC3339, expiry)
+	currTime := time.Now()
+	if authUser == "" || expTime.Before(currTime){
+		return false
+	}
+
+	return true
+}
 func PingRedis() (string,error){
 	client := redis.NewClient(&redis.Options{
 		Addr:     "apiator-3.csse.rose-hulman.edu:6379",
@@ -38,6 +82,7 @@ func PingRedis() (string,error){
 	// Output: PONG <nil>
 }
 
+
 func main() {
 	var cluster *gocb.Cluster
 	var bucket *gocb.Bucket
@@ -45,7 +90,7 @@ func main() {
 	var geterror error
 	var connecterror error
 	cluster, connecterror = gocb.Connect("127.0.0.1")
-	bucket, bucketerror = cluster.OpenBucket("users","")
+	bucket, bucketerror = cluster.OpenBucket("default","")
 	r := gin.Default()
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -78,27 +123,41 @@ func main() {
 		c.Bind(&form)
                 username := form.Username
                 password := form.Password
-                hashedpass, _ := HashPassword(password)
 		var couchpass map[string]interface{}
-
-		cas, geterror = bucket.Get("zach", &couchpass)
-		name_check := bucket.Name()
-		fmt.Println("bucket name: ", name_check)
+		cas, geterror = bucket.Get(username, &couchpass)
 
 		if cas == 0 {
-			fmt.Println("Error with get call")
-			fmt.Println("Username: ", username)
-			fmt.Println("form: ", form)
 			fmt.Println("bucket error: ", bucketerror)
 			fmt.Println("get error: ", geterror)
 			fmt.Println("connect error: ", connecterror)
-			fmt.Println(couchpass)
 		}else{
-			match := CheckPasswordHash(hashedpass, couchpass["password"].(string))
-			c.JSON(200, gin.H{
-				"matching_pass_check": match,
-			})
+			match := CheckPasswordHash(password,
+				couchpass["password"].(string))
+			if (match == true) {
+				token,_ := createJwtToken(username)
+				c.JSON(200, gin.H{
+					"token": token,
+					"expires": time.Now().Add(time.Minute),
+				})
+			} else {
+				c.JSON(200, gin.H{
+					"message": "request failed, authorization denied",
+				})
+			}
+
 		}
         })
-	r.Run(":8000") // listen and serve on 0.0.0.0:8000
+	r.GET("/authed-ping", func(c *gin.Context) {
+		authed := decodeAuthUserOrFail(c.Request)
+		if (authed == true) {
+			c.JSON(200, gin.H{
+				"message": "pong",
+			})
+		} else {
+			c.JSON(200, gin.H{
+				"message": "unauthorized user!",
+			})
+		}
+	})
+	r.Run(":8000")
 }
