@@ -5,14 +5,34 @@ import (
 	"os"
 	"bufio"
 	"strings"
+	"io/ioutil"
 	"net/http"
 	"net/url"
+	"encoding/json"
 	"github.com/urfave/cli"
 )
 
+type AuthResponse struct {
+	token string	`json:"token"`
+	expires string	`json:"expires"`
+}
+
+type ConnectionData struct {
+	host string
+	auth AuthResponse
+}
+
+var useREPL bool
+var connection ConnectionData
+
+func checkConenction() bool {
+	// in the future, check to see if token expires, etc.
+	conn := (connection != ConnectionData{})
+	fmt.Println("Connection: ", conn, connection.host)
+	return conn
+}
+
 func main() {
-	var useREPL bool
-	var host string
 	activeREPL := false
 	reader := bufio.NewReader(os.Stdin)
 	app := cli.NewApp()
@@ -48,7 +68,7 @@ func main() {
 					fmt.Printf("Expected a host argument.");
 				} else {
 					// print info for debugging
-					host = c.Args().First()
+					host := c.Args().First()
 					user := c.String("user")
 					pass := c.String("pass")
 					fmt.Println("host: ", host)
@@ -60,14 +80,26 @@ func main() {
 
 					if (err != nil) {
 						fmt.Println("ERR: ", err)
-						host = ""
+						// connection stays nil
 					} else {
 						fmt.Println("RESP: ", resp)
+						if (resp.StatusCode == 200) {
+							// accepted
+							jsonbytes, err := ioutil.ReadAll(resp.Body)
+							if (err != nil) {
+								fmt.Println("IOERR:", err)
+								return nil
+							} else {
+								connection = ConnectionData{host, AuthResponse{}}
+								json.Unmarshal(jsonbytes, &connection.auth)
+							}
+						}
 					}
 				}
 				
 				// always use repl once we connect
-				if (!activeREPL && (host != "")) {
+				connected := checkConenction()
+				if (!activeREPL && connected) {
 					c.App.Run([]string{os.Args[0], "repl"})
 				}
 				return nil
@@ -117,19 +149,176 @@ func main() {
 			Action: func(c *cli.Context) error {
 				where := c.Args().First()
 				if (!c.Bool("not-relative")) {
-					where = host + where
+					connected := checkConenction()
+					if (!connected) {
+						fmt.Println("ERR: Relative path requires connection")
+						return nil
+					} else {
+						where = connection.host + where
+					}
 				}
 				fmt.Println("GET: ", where)
 				resp, err := http.Get(where)
 
 				if (err != nil) {
 					fmt.Println("ERR: ", err)
-					host = ""
 				} else {
 					fmt.Println("RESP: ", resp)
 				}
 
 				return nil
+			},
+		},
+		// endpoints (CRUD)
+		{
+			Name: "endpoint",
+			Aliases: []string{"ep"},
+			Usage: "Perform a CRUD operation on an endpoint",
+			Subcommands: []cli.Command{
+				{
+					Name: "create",
+					Aliases: []string{"c"},
+					ArgsUsage: "[id]",
+					Usage: "Create an endpoint",
+					Action: func(c *cli.Context) error {
+						if c.NArg() != 1 {
+							fmt.Println("Expected one argument.");
+						} else {
+							epid := c.Args().First()
+							fmt.Println("Create endpoint: ", epid)
+						}
+						return nil
+					},
+				},
+				{
+					Name: "delete",
+					Aliases: []string{"del", "rm", "remove"},
+					ArgsUsage: "[id]",
+					Usage: "Delete an endpoint",
+					Action: func(c *cli.Context) error {
+						if c.NArg() != 1 {
+							fmt.Println("Expected one argument.");
+						} else {
+							epid := c.Args().First()
+							fmt.Println("Delete endpoint: ", epid)
+						}
+						return nil
+					},
+				},
+				{
+					Name: "update",
+					Aliases: []string{"up"},
+					Usage: "Update an endpoint",
+					Action: func(c *cli.Context) error {
+						fmt.Println("Update endpoint")
+						return nil
+					},
+				},
+				{
+					Name: "read",
+					Aliases: []string{"r"},
+					Usage: "Read an endpoint",
+					ArgsUsage: "[id]",
+					Action: func(c *cli.Context) error {
+						if c.NArg() != 1 {
+							fmt.Println("Expected one argument.");
+						} else {
+							epid := c.Args().First()
+							fmt.Println("Read endpoint: ", epid)
+						}
+						return nil
+					},
+				},
+				{
+					Name: "authorize",
+					Aliases: []string{"au", "auth"},
+					ArgsUsage: "[id] [user]",
+					Usage: "Authorize a user to access an endpoint",
+					Action: func(c *cli.Context) error {
+						if c.NArg() != 2 {
+							fmt.Println("Expected two arguments: [id] [user]");
+						} else {
+							epid := c.Args()[0]
+							user := c.Args()[1]
+							fmt.Println("Auth endpoint: ", epid, user)
+						}
+						return nil
+					},
+				},
+				{
+					Name: "metadata",
+					Aliases: []string{"meta", "info"},
+					ArgsUsage: "[id]",
+					Usage: "Returns metadata for an endpoint",
+					Action: func(c *cli.Context) error {
+						if c.NArg() != 1 {
+							fmt.Println("Expected one argument.");
+						} else {
+							epid := c.Args().First()
+							fmt.Println("metadata for endpoint: ", epid)
+						}
+						return nil
+					},
+				},
+			},
+		},
+		// put documents in endpoints
+		{
+			Name: "document",
+			Aliases: []string{"doc"},
+			Usage: "Modify documents in endpoints",
+			Subcommands: []cli.Command{
+				{
+					Name: "insert",
+					Aliases: []string{"i"},
+					Usage: "Insert document into an endpoint",
+					ArgsUsage: "[endpoint] [doc]",
+					Action: func(c *cli.Context) error {
+						if c.NArg() < 2 {
+							fmt.Println("Expected two arguments: [endpoint] [doc]");
+						} else {
+							epid := c.Args()[0]
+							doc := strings.Join(c.Args()[1:], " ")
+							fmt.Println("Insert into endpoint: ", epid)
+							fmt.Println(doc)
+						}
+						return nil
+					},
+				},
+				{
+					Name: "delete",
+					Aliases: []string{"del", "rm", "remove"},
+					ArgsUsage: "[endpoint] [docid]",
+					Usage: "Delete a document in endpoint",
+					Action: func(c *cli.Context) error {
+						if c.NArg() != 2 {
+							fmt.Println("Expected two arguments: [id] [docid]");
+						} else {
+							epid := c.Args()[0]
+							docid := c.Args()[1]
+							fmt.Println("Delete (Endpoint, Docid): (", epid, ",", docid, ")")
+						}
+						return nil
+					},
+				},
+				{
+					Name: "update",
+					Aliases: []string{"up"},
+					ArgsUsage: "[endpoint] [docid] [doc]",
+					Usage: "Update a doc in an endpoint",
+					Action: func(c *cli.Context) error {
+						if c.NArg() < 3 {
+							fmt.Println("Expected three arguments: [endpoint] [docid] [doc]");
+						} else {
+							epid := c.Args()[0]
+							docid := c.Args()[1]
+							doc := strings.Join(c.Args()[2:], " ")
+							fmt.Println("Update (Endpoint, Docid): (", epid, ",", docid, ")")
+							fmt.Println(doc)
+						}
+						return nil
+					},
+				},
 			},
 		},
 		// more commands coming soon™
@@ -141,7 +330,7 @@ func main() {
 			return nil
 		}
 
-		fmt.Println("Unkown command:", c.Args().First())
+		fmt.Println("Unknown command:", c.Args().First())
 
 		// continue to repl loop if needed
 		if (useREPL) {
@@ -150,6 +339,7 @@ func main() {
 
 		return nil
 	}
+	app.EnableBashCompletion = true
 	
 	app.Run(os.Args)
 }
