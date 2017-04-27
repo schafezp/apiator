@@ -140,7 +140,7 @@ func main() {
 					"expires": time.Now().Add(time.Minute),
 				})
 			} else {
-				c.JSON(200, gin.H{
+				c.JSON(401, gin.H{
 					"message": "request failed, authorization denied",
 				})
 			}
@@ -154,7 +154,7 @@ func main() {
 				"message": "pong",
 			})
 		} else {
-			c.JSON(200, gin.H{
+			c.JSON(401, gin.H{
 				"message": "unauthorized user!",
 			})
 		}
