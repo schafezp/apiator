@@ -9,8 +9,8 @@ import (
 	"github.com/go-redis/redis"
 	"time"
 	"net/http"
-	"strings"
 	"io/ioutil"
+	"strings"
 )
 
 var (
@@ -20,6 +20,27 @@ var (
 type Login struct {
 	Username string `form:"username" json:"username" binding:"required"`
 	Password string `form:"password" json:"password" binding:"required"`
+}
+
+type EndpointCRUD struct {
+	ID string `json:"id" binding:"required"`
+	Token string `json:"token" binding:"required"`
+	Doc EndpointDoc `json:"document"`
+}
+
+type EndpointDoc struct {
+	HTTPRequestTypes []string `json:"request_types"`
+	Owner string `json:"owner"`
+	Indexed bool `json:"indexed"`
+	Index string `json:"index"`
+	CreatedAt string `json:"created_at"`
+}
+
+type DataCRUD struct {
+	ID string `json:"id" binding:"required"`
+	Token string `json:"token" binding:"required"`
+	Doc interface{} `json:"document"`
+	DocID string `json:"doc_id"`
 }
 
 func HashPassword(password string) (string, error) {
@@ -35,18 +56,11 @@ func CheckPasswordHash(password, hash string) bool {
 func createJwtToken(user string) (string, error) {
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user": user,
-		"exp": time.Now().Add(time.Minute).Format(time.RFC3339),
+		"exp": time.Now().Add(10*time.Minute).Format(time.RFC3339),
 	}).SignedString(jwtSecret)
 }
 
-func decodeAuthUserOrFail(req *http.Request) bool {
-	authHeader := req.Header.Get("Authorization")
-	authHeaderParts := strings.SplitN(authHeader, " ", 2)
-	if authHeaderParts[0] != "Bearer" {
-		return false
-	}
-
-	authToken := authHeaderParts[1]
+func decodeAuthUserOrFail(authToken string) (bool, string) {
 	token, err := jwt.Parse(authToken, func(token *jwt.Token) (interface{}, error) {
 		// Don't forget to validate the alg is what you expect:
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -56,7 +70,7 @@ func decodeAuthUserOrFail(req *http.Request) bool {
 		return jwtSecret, nil
 	})
 	if err != nil {
-		return false
+		return false, ""
 	}
 
 	authUser := token.Claims.(jwt.MapClaims)["user"].(string)
@@ -64,15 +78,14 @@ func decodeAuthUserOrFail(req *http.Request) bool {
 	expTime, _ := time.Parse(time.RFC3339, expiry)
 	currTime := time.Now()
 	if authUser == "" || expTime.Before(currTime){
-		return false
+		return false, ""
 	}
-
-	return true
+	return true, authUser
 }
 func PingRedis() (string,error){
 	client := redis.NewClient(&redis.Options{
 		Addr:     "apiator-3.csse.rose-hulman.edu:6379",
-		Password: "AK1lTOuHyUNT5sN4JHP7", 
+		Password: "AK1lTOuHyUNT5sN4JHP7",
 		DB:       0,  // use default DB
 	})
 
@@ -89,8 +102,7 @@ func main() {
 	var bucketerror error
 	var geterror error
 	var connecterror error
-	cluster, connecterror = gocb.Connect("127.0.0.1")
-	bucket, bucketerror = cluster.OpenBucket("default","")
+	cluster, connecterror = gocb.Connect("137.112.104.106")
 	r := gin.Default()
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -118,37 +130,44 @@ func main() {
 		})
 	})
         r.POST("/auth", func(c *gin.Context) {
-		var cas gocb.Cas
-		var form Login
-		c.Bind(&form)
-                username := form.Username
-                password := form.Password
-		var couchpass map[string]interface{}
-		cas, geterror = bucket.Get(username, &couchpass)
+		bucket, bucketerror = cluster.OpenBucket("users","")
+		if bucketerror != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to open couchbase bucket",
+			})
+		} else {
+			var cas gocb.Cas
+			var form Login
+			c.Bind(&form)
+			username := form.Username
+			password := form.Password
+			var couchpass map[string]interface{}
+			cas, geterror = bucket.Get(username, &couchpass)
 
-		if cas == 0 {
-			fmt.Println("bucket error: ", bucketerror)
-			fmt.Println("get error: ", geterror)
-			fmt.Println("connect error: ", connecterror)
-		}else{
-			match := CheckPasswordHash(password,
-				couchpass["password"].(string))
-			if (match == true) {
-				token,_ := createJwtToken(username)
-				c.JSON(200, gin.H{
-					"token": token,
-					"expires": time.Now().Add(time.Minute),
-				})
-			} else {
-				c.JSON(401, gin.H{
-					"message": "request failed, authorization denied",
-				})
+			if cas == 0 {
+				fmt.Println("bucket error: ", bucketerror)
+				fmt.Println("get error: ", geterror)
+				fmt.Println("connect error: ", connecterror)
+			}else{
+				match := CheckPasswordHash(password,
+					couchpass["password"].(string))
+				if (match == true) {
+					token,_ := createJwtToken(username)
+					c.JSON(200, gin.H{
+						"token": token,
+						"expires": time.Now().Add(time.Minute),
+					})
+				} else {
+					c.JSON(401, gin.H{
+						"message": "request failed, authorization denied",
+					})
+				}
+
 			}
-
 		}
         })
 	r.GET("/authed-ping", func(c *gin.Context) {
-		authed := decodeAuthUserOrFail(c.Request)
+		authed, _ := decodeAuthUserOrFail("foo")
 		if (authed == true) {
 			c.JSON(200, gin.H{
 				"message": "pong",
@@ -157,6 +176,203 @@ func main() {
 			c.JSON(401, gin.H{
 				"message": "unauthorized user!",
 			})
+		}
+	})
+	r.POST("/create-endpoint", func(c *gin.Context) {
+		var json EndpointCRUD
+		var document EndpointDoc
+		if c.BindJSON(&json) == nil {
+			authed, user := decodeAuthUserOrFail(json.Token)
+			if (authed == true) {
+				bucket, _ = cluster.OpenBucket("endpoints","")
+				document = json.Doc
+				document.Owner = user
+				document.CreatedAt = time.Now().Format(time.RFC3339)
+				_, _ = bucket.Insert(json.ID, document, 0)
+				c.JSON(200, gin.H{
+					"message": "document inserted",
+				})
+			}else{
+				c.JSON(401, gin.H{
+					"message": "unauthorized user!",
+				})
+			}
+		}
+
+	})
+	r.POST("/get-endpoint", func(c *gin.Context) {
+		var json EndpointCRUD
+		var document EndpointDoc
+		if c.BindJSON(&json) == nil {
+			authed, _ := decodeAuthUserOrFail(json.Token)
+			if (authed == true) {
+				bucket, _ = cluster.OpenBucket("endpoints","")
+				_, _ = bucket.Get(json.ID, &document)
+				c.JSON(200, document)
+			}else{
+				c.JSON(401, gin.H{
+					"message": "unauthorized user!",
+				})
+			}
+		}
+	})
+	r.POST("/delete-endpoint", func(c *gin.Context) {
+		var json EndpointCRUD
+		if c.BindJSON(&json) == nil {
+			authed, _ := decodeAuthUserOrFail(json.Token)
+			if (authed == true) {
+				bucket, _ = cluster.OpenBucket("endpoints","")
+				_, _ = bucket.Remove(json.ID, 0)
+				c.JSON(200, gin.H{
+					"message": "document deleted",
+				})
+			}else{
+				c.JSON(401, gin.H{
+					"message": "unauthorized user!",
+				})
+			}
+		}
+	})
+	r.POST("/update-endpoint", func(c *gin.Context) {
+		var json EndpointCRUD
+		var document EndpointDoc
+		var db_document EndpointDoc
+		if c.BindJSON(&json) == nil {
+			authed, _ := decodeAuthUserOrFail(json.Token)
+			if (authed == true) {
+				bucket, _ = cluster.OpenBucket("endpoints","")
+				document = json.Doc
+				_, _ = bucket.Get(json.ID, &db_document)
+				document.CreatedAt = db_document.CreatedAt
+				document.Owner = db_document.Owner
+				_, _ = bucket.Replace(json.ID, document, 0, 0)
+				c.JSON(200, gin.H{
+					"message": "document updated",
+				})
+			}else{
+				c.JSON(401, gin.H{
+					"message": "unauthorized user!",
+				})
+			}
+		}
+	})
+	r.POST("/insert", func(c *gin.Context) {
+		var json DataCRUD
+		var endpoint_doc EndpointDoc
+		var err error
+		var cluster_manager *gocb.ClusterManager
+		if c.BindJSON(&json) == nil {
+			authed, _ := decodeAuthUserOrFail(json.Token)
+			if (authed == true) {
+				bucket, _ = cluster.OpenBucket("endpoints","")
+				_, _ = bucket.Get(json.ID, &endpoint_doc)
+				if endpoint_doc.Owner != "" {
+					var endpoint_bucket_name string
+					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
+					bucket, err = cluster.OpenBucket(endpoint_bucket_name, "")
+					if err != nil {
+						cluster_manager = cluster.Manager("Administrator", "password")
+						err = cluster_manager.InsertBucket(&gocb.BucketSettings{
+							FlushEnabled: false,
+							IndexReplicas: false,
+							Name: endpoint_bucket_name,
+							Password: "",
+							Quota: 256,
+							Replicas: 1,
+							Type: gocb.BucketType(0),
+						})
+						time.Sleep(8*time.Second)
+					}
+					bucket, _ = cluster.OpenBucket(endpoint_bucket_name, "")
+					_, _ = bucket.Insert(json.DocID, json.Doc, 0)
+					c.JSON(200, gin.H{
+						"message": "document inserted",
+					})
+				}
+			}else{
+				c.JSON(401, gin.H{
+					"message": "unauthorized user!",
+				})
+			}
+		} else {
+			fmt.Printf("whoops!")
+		}
+	})
+	r.POST("/update", func(c *gin.Context) {
+		var json DataCRUD
+		var endpoint_doc EndpointDoc
+		if c.BindJSON(&json) == nil {
+			authed, _ := decodeAuthUserOrFail(json.Token)
+			if (authed == true) {
+				bucket, _ = cluster.OpenBucket("endpoints","")
+				_, _ = bucket.Get(json.ID, &endpoint_doc)
+				if endpoint_doc.Owner != "" {
+					var endpoint_bucket_name string
+					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
+					bucket, _ = cluster.OpenBucket(endpoint_bucket_name, "")
+					_, _ = bucket.Replace(json.DocID, json.Doc, 0, 0)
+					c.JSON(200, gin.H{
+						"message": "document updated",
+					})
+				}
+			}else{
+				c.JSON(401, gin.H{
+					"message": "unauthorized user!",
+				})
+			}
+		} else {
+			fmt.Printf("whoops!")
+		}
+	})
+	r.POST("/delete", func(c *gin.Context) {
+		var json DataCRUD
+		var endpoint_doc EndpointDoc
+		if c.BindJSON(&json) == nil {
+			authed, _ := decodeAuthUserOrFail(json.Token)
+			if (authed == true) {
+				bucket, _ = cluster.OpenBucket("endpoints","")
+				_, _ = bucket.Get(json.ID, &endpoint_doc)
+				if endpoint_doc.Owner != "" {
+					var endpoint_bucket_name string
+					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
+					bucket, _ = cluster.OpenBucket(endpoint_bucket_name, "")
+					_, _ = bucket.Remove(json.DocID, 0)
+					c.JSON(200, gin.H{
+						"message": "document removed",
+					})
+				}
+			}else{
+				c.JSON(401, gin.H{
+					"message": "unauthorized user!",
+				})
+			}
+		} else {
+			fmt.Printf("whoops!")
+		}
+	})
+	r.POST("/get", func(c *gin.Context) {
+		var json DataCRUD
+		var endpoint_doc EndpointDoc
+		var data_blob interface{}
+		if c.BindJSON(&json) == nil {
+			authed, _ := decodeAuthUserOrFail(json.Token)
+			if (authed == true) {
+				bucket, _ = cluster.OpenBucket("endpoints","")
+				_, _ = bucket.Get(json.ID, &endpoint_doc)
+				if endpoint_doc.Owner != "" {
+					var endpoint_bucket_name string
+					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
+					bucket, _ = cluster.OpenBucket(endpoint_bucket_name, "")
+					_, _ = bucket.Get(json.DocID, &data_blob)
+					c.JSON(200, data_blob)
+				}
+			}else{
+				c.JSON(401, gin.H{
+					"message": "unauthorized user!",
+				})
+			}
+		} else {
+			fmt.Printf("whoops!")
 		}
 	})
 	r.Run(":8000")
