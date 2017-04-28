@@ -97,14 +97,15 @@ func main() {
 			"message": "pong",
 		})
 	})
-	r.GET("/redisping", func(c *gin.Context) {
+	r.GET("/redis/ping", func(c *gin.Context) {
 		var pong,err = PingRedis()
+		
 		c.JSON(200, gin.H{
 			"redis-err": err,
 			"redis-message": pong,
 		})
 	})
-	r.GET("/solrping", func(c *gin.Context) {
+	r.GET("/solr/ping", func(c *gin.Context) {
 		resp, err := http.Get("http://apiator-2.csse.rose-hulman.edu:8983/solr/test/admin/ping")
 		if err != nil {
 			panic(err)
