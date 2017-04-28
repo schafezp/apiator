@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"bufio"
+	"bytes"
 	"strings"
 	"io/ioutil"
 	"net/http"
@@ -24,6 +25,12 @@ type ConnectionData struct {
 
 var useREPL bool
 var connection ConnectionData
+
+func postJSON(where string, jsonString string) (*http.Response, error) {
+	buff := bytes.NewBuffer([]byte(jsonString))
+	return http.Post(where, "application/json", buff)
+
+}
 
 func checkConenction() bool {
 	// in the future, check to see if token expires, etc.
@@ -186,6 +193,15 @@ func main() {
 						} else {
 							epid := c.Args().First()
 							fmt.Println("Create endpoint: ", epid)
+							jsonS := fmt.Sprintf(`{"id":%s, "token":%s, "document": {"request_types": ["Get"],"indexed": false}}`, 
+								epid, connection.auth.token)
+							where := connection.host + "/create-endpoint"
+							resp, err := postJSON(where, jsonS)
+							if (err != nil) {
+								fmt.Println("ERR:", err)
+							} else {
+								fmt.Println("RESP:", resp)
+							}
 						}
 						return nil
 					},
@@ -201,6 +217,15 @@ func main() {
 						} else {
 							epid := c.Args().First()
 							fmt.Println("Delete endpoint: ", epid)
+							jsonS := fmt.Sprintf(`{"id":%s, "token":%s}`, 
+								epid, connection.auth.token)
+							where := connection.host + "/delete-endpoint"
+							resp, err := postJSON(where, jsonS)
+							if (err != nil) {
+								fmt.Println("ERR:", err)
+							} else {
+								fmt.Println("RESP:", resp)
+							}
 						}
 						return nil
 					},
@@ -209,14 +234,30 @@ func main() {
 					Name: "update",
 					Aliases: []string{"up"},
 					Usage: "Update an endpoint",
+					ArgsUsage: "[endpoint] [doc]",
 					Action: func(c *cli.Context) error {
-						fmt.Println("Update endpoint")
+						if c.NArg() < 2 {
+							fmt.Println("Expected two arguments: [endpoint] [doc]");
+						} else {
+							epid := c.Args()[0]
+							doc := strings.Join(c.Args()[1:], " ")
+							fmt.Println("Update Endpoint: ", epid)
+							jsonS := fmt.Sprintf(`{"id":%s, "token":%s, "document": %s}`, 
+								epid, connection.auth.token, doc)
+							where := connection.host + "/update-endpoint"
+							resp, err := postJSON(where, jsonS)
+							if (err != nil) {
+								fmt.Println("ERR:", err)
+							} else {
+								fmt.Println("RESP:", resp)
+							}
+						}
 						return nil
 					},
 				},
 				{
 					Name: "read",
-					Aliases: []string{"r"},
+					Aliases: []string{"r", "get"},
 					Usage: "Read an endpoint",
 					ArgsUsage: "[id]",
 					Action: func(c *cli.Context) error {
@@ -225,6 +266,15 @@ func main() {
 						} else {
 							epid := c.Args().First()
 							fmt.Println("Read endpoint: ", epid)
+							jsonS := fmt.Sprintf(`{"id":%s, "token":%s}`, 
+								epid, connection.auth.token)
+							where := connection.host + "/get-endpoint"
+							resp, err := postJSON(where, jsonS)
+							if (err != nil) {
+								fmt.Println("ERR:", err)
+							} else {
+								fmt.Println("RESP:", resp)
+							}
 						}
 						return nil
 					},
@@ -241,6 +291,7 @@ func main() {
 							epid := c.Args()[0]
 							user := c.Args()[1]
 							fmt.Println("Auth endpoint: ", epid, user)
+							fmt.Prinlnt("[NOT IMPL YET]")
 						}
 						return nil
 					},
@@ -256,6 +307,7 @@ func main() {
 						} else {
 							epid := c.Args().First()
 							fmt.Println("metadata for endpoint: ", epid)
+							fmt.Prinlnt("[NOT IMPL YET]")
 						}
 						return nil
 					},
