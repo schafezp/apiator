@@ -291,7 +291,7 @@ func main() {
 							epid := c.Args()[0]
 							user := c.Args()[1]
 							fmt.Println("Auth endpoint: ", epid, user)
-							fmt.Prinlnt("[NOT IMPL YET]")
+							fmt.Println("[NOT IMPL YET]")
 						}
 						return nil
 					},
@@ -307,7 +307,7 @@ func main() {
 						} else {
 							epid := c.Args().First()
 							fmt.Println("metadata for endpoint: ", epid)
-							fmt.Prinlnt("[NOT IMPL YET]")
+							fmt.Println("[NOT IMPL YET]")
 						}
 						return nil
 					},
@@ -324,15 +324,25 @@ func main() {
 					Name: "insert",
 					Aliases: []string{"i"},
 					Usage: "Insert document into an endpoint",
-					ArgsUsage: "[endpoint] [doc]",
+					ArgsUsage: "[endpoint] [docid] [doc]",
 					Action: func(c *cli.Context) error {
-						if c.NArg() < 2 {
-							fmt.Println("Expected two arguments: [endpoint] [doc]");
+						if c.NArg() < 3 {
+							fmt.Println("Expected three arguments: [endpoint] [docid] [doc]");
 						} else {
 							epid := c.Args()[0]
-							doc := strings.Join(c.Args()[1:], " ")
+							docid := c.Args()[1]
+							doc := strings.Join(c.Args()[2:], " ")
 							fmt.Println("Insert into endpoint: ", epid)
 							fmt.Println(doc)
+							jsonS := fmt.Sprintf(`{"id":%s, "token":%s, "document": %s, "doc_id": %s}`, 
+								epid, connection.auth.token, doc, docid)
+							where := connection.host + "/insert"
+							resp, err := postJSON(where, jsonS)
+							if (err != nil) {
+								fmt.Println("ERR:", err)
+							} else {
+								fmt.Println("RESP:", resp)
+							}
 						}
 						return nil
 					},
@@ -349,6 +359,15 @@ func main() {
 							epid := c.Args()[0]
 							docid := c.Args()[1]
 							fmt.Println("Delete (Endpoint, Docid): (", epid, ",", docid, ")")
+							jsonS := fmt.Sprintf(`{"id":%s, "token":%s, "doc_id": %s}`, 
+								epid, connection.auth.token, docid)
+							where := connection.host + "/delete"
+							resp, err := postJSON(where, jsonS)
+							if (err != nil) {
+								fmt.Println("ERR:", err)
+							} else {
+								fmt.Println("RESP:", resp)
+							}
 						}
 						return nil
 					},
@@ -367,6 +386,40 @@ func main() {
 							doc := strings.Join(c.Args()[2:], " ")
 							fmt.Println("Update (Endpoint, Docid): (", epid, ",", docid, ")")
 							fmt.Println(doc)
+							jsonS := fmt.Sprintf(`{"id":%s, "token":%s, "document": %s, "doc_id": %s}`, 
+								epid, connection.auth.token, doc, docid)
+							where := connection.host + "/update"
+							resp, err := postJSON(where, jsonS)
+							if (err != nil) {
+								fmt.Println("ERR:", err)
+							} else {
+								fmt.Println("RESP:", resp)
+							}
+						}
+						return nil
+					},
+				},
+				{
+					Name: "read",
+					Aliases: []string{"r", "get"},
+					Usage: "Read document from an endpoint",
+					ArgsUsage: "[endpoint] [docid]",
+					Action: func(c *cli.Context) error {
+						if c.NArg() != 2 {
+							fmt.Println("Expected three arguments: [endpoint] [docid]");
+						} else {
+							epid := c.Args()[0]
+							docid := c.Args()[1]
+							fmt.Println("Read Doc: ", epid, docid)
+							jsonS := fmt.Sprintf(`{"id":%s, "token":%s, "doc_id": %s}`, 
+								epid, connection.auth.token, docid)
+							where := connection.host + "/read"
+							resp, err := postJSON(where, jsonS)
+							if (err != nil) {
+								fmt.Println("ERR:", err)
+							} else {
+								fmt.Println("RESP:", resp)
+							}
 						}
 						return nil
 					},
