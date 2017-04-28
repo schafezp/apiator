@@ -84,26 +84,38 @@ func PingRedis() (string,error){
 	// Output: PONG <nil>
 }
 
-//Store a given jwt user token in redis
-func storeUserTokenRedis(user,jwt  string) (error){
+//retrieve all usernames that have tokens currently
+func retrieveAllAuthedUsersRedis() ([]string,error){
 	client := redis.NewClient(&redis.Options{
 		Addr:     redisServerAddr,
 		Password: redisServerPassword, 
 		DB:       0,  // use default DB
 	})
 
-	err := client.Set(fmt.Sprintf("token_%s",user), jwt,0).Err()
+	val,err := client.SMembers("usernames").Result()
+	return val,err
+}
+//Store a given jwt user token in redis
+func storeUserTokenRedis(username,jwt  string) (error){
+	client := redis.NewClient(&redis.Options{
+		Addr:     redisServerAddr,
+		Password: redisServerPassword, 
+		DB:       0,  // use default DB
+	})
+	client.SAdd("usernames",username)
+	// client.SAdd("jwts",jwt)
+	err := client.Set(fmt.Sprintf("token_%s",username), jwt,0).Err()
 	return err
 }
 //retrieve the jwt of a user in  a given jwt user token in redis
-func retrieveUserTokenRedis(user string) (string,error){
+func retrieveUserTokenRedis(username string) (string,error){
 	client := redis.NewClient(&redis.Options{
 		Addr:     redisServerAddr,
 		Password: redisServerPassword, 
 		DB:       0,  // use default DB
 	})
-
-	val,err := client.Get(fmt.Sprintf("token_%s",user)).Result()
+	
+	val,err := client.Get(fmt.Sprintf("token_%s",username)).Result()
 	return val,err
 }
 
@@ -155,6 +167,13 @@ func main() {
 		c.JSON(200, gin.H{
 			"redis-err": err,
 			"user-token": token,
+		})
+	})
+	r.GET("/redis/get-all-authed-users", func(c *gin.Context) {
+		var tokens,err = retrieveAllAuthedUsersRedis()
+		c.JSON(200, gin.H{
+			"redis-err": err,
+			"user-tokens": tokens,
 		})
 	})
 	r.GET("/solr/ping", func(c *gin.Context) {
