@@ -15,6 +15,8 @@ import (
 
 var (
 	jwtSecret  = []byte("KHOzH8DJRHIPfC9Mq8yH")
+	redisServerAddr = "apiator-3.csse.rose-hulman.edu:6379"
+	redisServerPassword = "AK1lTOuHyUNT5sN4JHP7"
 )
 
 type Login struct {
@@ -71,8 +73,8 @@ func decodeAuthUserOrFail(req *http.Request) bool {
 }
 func PingRedis() (string,error){
 	client := redis.NewClient(&redis.Options{
-		Addr:     "apiator-3.csse.rose-hulman.edu:6379",
-		Password: "AK1lTOuHyUNT5sN4JHP7", 
+		Addr:     redisServerAddr,
+		Password: redisServerPassword, 
 		DB:       0,  // use default DB
 	})
 
