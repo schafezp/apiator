@@ -193,7 +193,7 @@ func main() {
 						} else {
 							epid := c.Args().First()
 							fmt.Println("Create endpoint: ", epid)
-							jsonS := fmt.Sprintf(`{"id":%s, "token":%s, "document": {"request_types": ["Get"],"indexed": false}}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document": {"request_types": ["Get"],"indexed": false}}`, 
 								epid, connection.auth.token)
 							where := connection.host + "/create-endpoint"
 							resp, err := postJSON(where, jsonS)
@@ -217,7 +217,7 @@ func main() {
 						} else {
 							epid := c.Args().First()
 							fmt.Println("Delete endpoint: ", epid)
-							jsonS := fmt.Sprintf(`{"id":%s, "token":%s}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s"}`, 
 								epid, connection.auth.token)
 							where := connection.host + "/delete-endpoint"
 							resp, err := postJSON(where, jsonS)
@@ -242,7 +242,7 @@ func main() {
 							epid := c.Args()[0]
 							doc := strings.Join(c.Args()[1:], " ")
 							fmt.Println("Update Endpoint: ", epid)
-							jsonS := fmt.Sprintf(`{"id":%s, "token":%s, "document": %s}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document":%s}`, 
 								epid, connection.auth.token, doc)
 							where := connection.host + "/update-endpoint"
 							resp, err := postJSON(where, jsonS)
@@ -266,7 +266,7 @@ func main() {
 						} else {
 							epid := c.Args().First()
 							fmt.Println("Read endpoint: ", epid)
-							jsonS := fmt.Sprintf(`{"id":%s, "token":%s}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s"}`, 
 								epid, connection.auth.token)
 							where := connection.host + "/get-endpoint"
 							resp, err := postJSON(where, jsonS)
@@ -334,7 +334,7 @@ func main() {
 							doc := strings.Join(c.Args()[2:], " ")
 							fmt.Println("Insert into endpoint: ", epid)
 							fmt.Println(doc)
-							jsonS := fmt.Sprintf(`{"id":%s, "token":%s, "document": %s, "doc_id": %s}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document": %s, "doc_id": "%s"}`, 
 								epid, connection.auth.token, doc, docid)
 							where := connection.host + "/insert"
 							resp, err := postJSON(where, jsonS)
@@ -359,7 +359,7 @@ func main() {
 							epid := c.Args()[0]
 							docid := c.Args()[1]
 							fmt.Println("Delete (Endpoint, Docid): (", epid, ",", docid, ")")
-							jsonS := fmt.Sprintf(`{"id":%s, "token":%s, "doc_id": %s}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "doc_id":"%s"}`, 
 								epid, connection.auth.token, docid)
 							where := connection.host + "/delete"
 							resp, err := postJSON(where, jsonS)
@@ -386,7 +386,7 @@ func main() {
 							doc := strings.Join(c.Args()[2:], " ")
 							fmt.Println("Update (Endpoint, Docid): (", epid, ",", docid, ")")
 							fmt.Println(doc)
-							jsonS := fmt.Sprintf(`{"id":%s, "token":%s, "document": %s, "doc_id": %s}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document": %s, "doc_id": "%s"}`, 
 								epid, connection.auth.token, doc, docid)
 							where := connection.host + "/update"
 							resp, err := postJSON(where, jsonS)
@@ -411,7 +411,7 @@ func main() {
 							epid := c.Args()[0]
 							docid := c.Args()[1]
 							fmt.Println("Read Doc: ", epid, docid)
-							jsonS := fmt.Sprintf(`{"id":%s, "token":%s, "doc_id": %s}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "doc_id": "%s"}`, 
 								epid, connection.auth.token, docid)
 							where := connection.host + "/read"
 							resp, err := postJSON(where, jsonS)
@@ -446,5 +446,6 @@ func main() {
 	}
 	app.EnableBashCompletion = true
 	
+
 	app.Run(os.Args)
 }
