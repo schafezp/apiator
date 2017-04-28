@@ -121,6 +121,16 @@ func storeUserTokenRedis(username, jwt string) error {
 	err := client.Set(fmt.Sprintf("token_%s", username), jwt, 0).Err()
 	return err
 }
+func resetUserTokenRedis(username string) (error,error) {
+	client := redis.NewClient(&redis.Options{
+		Addr:     redisServerAddr,
+		Password: redisServerPassword,
+		DB:       0, // use default DB
+	})
+	sremerr := client.SRem("usernames", username).Err()
+	err := storeUserTokenRedis(username,"")
+	return sremerr,err
+}
 
 //retrieve the jwt of a user in  a given jwt user token in redis
 func retrieveUserTokenRedis(username string) (string, error) {
@@ -173,10 +183,10 @@ func main() {
 	})
 	r.GET("/redis/reset-user-token/:username", func(c *gin.Context) {
 		var username = c.Param("username")
-
-		var err = storeUserTokenRedis(username, "")
+		var reseterr,err = resetUserTokenRedis(username)
 		c.JSON(200, gin.H{
 			"redis-err": err,
+			"redis-reset-err": reseterr,
 			"user":      username,
 			"jwt":       "reset: value nil",
 		})
