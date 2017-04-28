@@ -84,6 +84,31 @@ func PingRedis() (string,error){
 	// Output: PONG <nil>
 }
 
+//Store a given jwt user token in redis
+func storeUserTokenRedis(user,jwt  string) (error){
+	client := redis.NewClient(&redis.Options{
+		Addr:     redisServerAddr,
+		Password: redisServerPassword, 
+		DB:       0,  // use default DB
+	})
+
+	err := client.Set(fmt.Sprintf("token_%s",user), jwt,0).Err()
+	return err
+}
+//retrieve the jwt of a user in  a given jwt user token in redis
+func retrieveUserTokenRedis(user string) (string,error){
+	client := redis.NewClient(&redis.Options{
+		Addr:     redisServerAddr,
+		Password: redisServerPassword, 
+		DB:       0,  // use default DB
+	})
+
+	val,err := client.Get(fmt.Sprintf("token_%s",user)).Result()
+	return val,err
+}
+
+
+
 
 func main() {
 	var cluster *gocb.Cluster
@@ -105,6 +130,31 @@ func main() {
 		c.JSON(200, gin.H{
 			"redis-err": err,
 			"redis-message": pong,
+		})
+	})
+	r.GET("/redis/set-user-token/:username", func(c *gin.Context) {
+		var username = c.Param("username")
+		var jwt,jwterr = createJwtToken(username)
+		if jwterr != nil {
+			c.JSON(400, gin.H{
+				"jwt-create-err": jwterr,
+				"jwt": jwt,})}
+		
+		var err = storeUserTokenRedis(username,jwt)
+		c.JSON(200, gin.H{
+			"redis-err": err,
+			"user": username,
+			"jwt": jwt,
+		})
+	})
+	r.GET("/redis/get-user-token/:username", func(c *gin.Context) {
+		var username = c.Param("username")
+		fmt.Println("username")
+		fmt.Println(username)
+		var token,err = retrieveUserTokenRedis(username)
+		c.JSON(200, gin.H{
+			"redis-err": err,
+			"user-token": token,
 		})
 	})
 	r.GET("/solr/ping", func(c *gin.Context) {
