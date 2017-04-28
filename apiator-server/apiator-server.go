@@ -171,6 +171,16 @@ func main() {
 			"jwt":       jwt,
 		})
 	})
+	r.GET("/redis/reset-user-token/:username", func(c *gin.Context) {
+		var username = c.Param("username")
+
+		var err = storeUserTokenRedis(username, "")
+		c.JSON(200, gin.H{
+			"redis-err": err,
+			"user":      username,
+			"jwt":       "reset: value nil",
+		})
+	})
 	r.GET("/redis/get-user-token/:username", func(c *gin.Context) {
 		var username = c.Param("username")
 		fmt.Println("username")
