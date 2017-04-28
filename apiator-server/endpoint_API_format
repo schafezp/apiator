@@ -1,0 +1,78 @@
+AUTH:
+{
+	"username":"zach",
+	"password":"issocool"
+}
+
+CREATE-ENDPOINT:
+{
+	"id":"/test/endpoint2",
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA2OjIwOjQ4LTA0OjAwIiwidXNlciI6InphY2gifQ.A58s_T0ee1sBqYqOsD02PjvzhnvnsHeXlYGe8CiUEo4",
+	"document": {
+		"request_types": [
+			"Get"
+			],
+		"indexed": false
+	}
+}
+
+GET-ENDPOINT:
+{
+	"id":"/test/endpoint2",
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA2OjIwOjQ4LTA0OjAwIiwidXNlciI6InphY2gifQ.A58s_T0ee1sBqYqOsD02PjvzhnvnsHeXlYGe8CiUEo4"
+}
+
+UPDATE-ENDPOINT:
+{
+	"id":"/test/endpoint2",
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA2OjQ3OjE1LTA0OjAwIiwidXNlciI6InphY2gifQ.wC4ssgvMk8mQ9pznzqH3RgzkZXXVjMbdrGxBe4r40lU",
+	"document": {
+		"request_types": [
+			"Get",
+			"Post"
+			],
+		"indexed": true,
+		"index": "flower_id"
+	}
+}
+
+DELETE-ENDPOINT:
+{
+	"id":"/test/endpoint2",
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA2OjIwOjQ4LTA0OjAwIiwidXNlciI6InphY2gifQ.A58s_T0ee1sBqYqOsD02PjvzhnvnsHeXlYGe8CiUEo4"
+}
+
+INSERT:
+{
+	"id":"/test/endpoint",
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA3OjU5OjAzLTA0OjAwIiwidXNlciI6InphY2gifQ.qmjseAXWk2qK_u0C1SVlUaI_IusTv1Xz-XUt89W6jRk",
+	"document": {
+		"some": "fields"
+	},
+	"doc_id": "flower-foobar-12345"
+}
+
+GET:
+{
+	"id":"/test/endpoint",
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA3OjU5OjAzLTA0OjAwIiwidXNlciI6InphY2gifQ.qmjseAXWk2qK_u0C1SVlUaI_IusTv1Xz-XUt89W6jRk",
+	"doc_id": "flower-foobar-12345"
+}
+
+UPDATE:
+{
+	"id":"/test/endpoint",
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA3OjUxOjQyLTA0OjAwIiwidXNlciI6InphY2gifQ.lsPX3fqLy_x-Ig0Zryri8pMZtC9GrD5oManfhmjzM5g",
+	"document": {
+		"some": "fields",
+		"more": "flowers"
+	},
+	"doc_id": "flower-foobar-12345"
+}
+
+DELETE:
+{
+	"id":"/test/endpoint",
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA3OjUxOjQyLTA0OjAwIiwidXNlciI6InphY2gifQ.lsPX3fqLy_x-Ig0Zryri8pMZtC9GrD5oManfhmjzM5g",
+	"doc_id": "flower-foobar-12345"
+}
