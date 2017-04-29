@@ -15,6 +15,9 @@ import (
 
 var (
 	jwtSecret           = []byte("KHOzH8DJRHIPfC9Mq8yH")
+	
+)
+const (
 	redisServerAddr     = "apiator-3.csse.rose-hulman.edu:6379"
 	redisServerPassword = "AK1lTOuHyUNT5sN4JHP7"
 )
