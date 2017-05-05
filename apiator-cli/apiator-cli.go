@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"bufio"
-	"bytes"
 	"strings"
 	"io/ioutil"
 	"net/http"
@@ -27,9 +26,13 @@ var useREPL bool
 var connection ConnectionData
 
 func postJSON(where string, jsonString string) (*http.Response, error) {
-	buff := bytes.NewBuffer([]byte(jsonString))
-	return http.Post(where, "application/json", buff)
-
+	client := &http.Client{}
+	req, err := http.NewRequest("POST", where, strings.NewReader(jsonString))
+	if (err != nil) {
+		return nil, err
+	}
+	req.Header.Add("Content-Type", "application/json")
+	return client.Do(req)
 }
 
 func checkConenction() bool {
@@ -181,6 +184,10 @@ func main() {
 			Name: "endpoint",
 			Aliases: []string{"ep"},
 			Usage: "Perform a CRUD operation on an endpoint",
+			Action: func(c *cli.Context) error {
+				fmt.Println("Invalid command")
+				return nil
+			},
 			Subcommands: []cli.Command{
 				{
 					Name: "create",
@@ -319,6 +326,10 @@ func main() {
 			Name: "document",
 			Aliases: []string{"doc"},
 			Usage: "Modify documents in endpoints",
+			Action: func(c *cli.Context) error {
+				fmt.Println("Invalid command")
+				return nil
+			},
 			Subcommands: []cli.Command{
 				{
 					Name: "insert",
@@ -446,6 +457,19 @@ func main() {
 	}
 	app.EnableBashCompletion = true
 	
+	''' Test Post
+	jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document": %s, "doc_id": "%s"}`, "epid", "connection.auth.token", "{}", "docid")
+	resp, err := postJSON(`http://httpbin.org/post`, jsonS)	
+	if (err != nil) {
+		fmt.Println(err)
+	} else {
+		fmt.Println("RESPONSE: ")
+		bbytes, e := ioutil.ReadAll(resp.Body)
+		if (e != nil) {panic(e)}
+		fmt.Println(string(bbytes))
+		fmt.Println(resp)
+	}
+	'''
 
 	app.Run(os.Args)
 }
