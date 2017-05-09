@@ -362,24 +362,24 @@ func main() {
 	})
 	r.POST("/insert", func(c *gin.Context) {
 		var json DataCRUD
-		var endpoint_doc EndpointDoc
+		var endpointDoc EndpointDoc
 		var err error
-		var cluster_manager *gocb.ClusterManager
+		var clusterManager *gocb.ClusterManager
 		if c.BindJSON(&json) == nil {
 			authed, _ := decodeAuthUserOrFail(json.Token)
 			if authed == true {
 				bucket, _ = cluster.OpenBucket("endpoints", "")
-				_, _ = bucket.Get(json.ID, &endpoint_doc)
-				if endpoint_doc.Owner != "" {
-					var endpoint_bucket_name string
-					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
-					bucket, err = cluster.OpenBucket(endpoint_bucket_name, "")
+				_, _ = bucket.Get(json.ID, &endpointDoc)
+				if endpointDoc.Owner != "" {
+					var endpointBucketName string
+					endpointBucketName = strings.Replace(json.ID, "/", "-", -1)
+					bucket, err = cluster.OpenBucket(endpointBucketName, "")
 					if err != nil {
-						cluster_manager = cluster.Manager("Administrator", "password")
-						err = cluster_manager.InsertBucket(&gocb.BucketSettings{
+						clusterManager = cluster.Manager("Administrator", "password")
+						err = clusterManager.InsertBucket(&gocb.BucketSettings{
 							FlushEnabled:  false,
 							IndexReplicas: false,
-							Name:          endpoint_bucket_name,
+							Name:          endpointBucketName,
 							Password:      "",
 							Quota:         256,
 							Replicas:      1,
@@ -387,7 +387,7 @@ func main() {
 						})
 						time.Sleep(8 * time.Second)
 					}
-					bucket, _ = cluster.OpenBucket(endpoint_bucket_name, "")
+					bucket, _ = cluster.OpenBucket(endpointBucketName, "")
 					_, _ = bucket.Insert(json.DocID, json.Doc, 0)
 					c.JSON(200, gin.H{
 						"message": "document inserted",
@@ -404,16 +404,16 @@ func main() {
 	})
 	r.POST("/update", func(c *gin.Context) {
 		var json DataCRUD
-		var endpoint_doc EndpointDoc
+		var endpointDoc EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, _ := decodeAuthUserOrFail(json.Token)
 			if authed == true {
 				bucket, _ = cluster.OpenBucket("endpoints", "")
-				_, _ = bucket.Get(json.ID, &endpoint_doc)
-				if endpoint_doc.Owner != "" {
-					var endpoint_bucket_name string
-					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
-					bucket, _ = cluster.OpenBucket(endpoint_bucket_name, "")
+				_, _ = bucket.Get(json.ID, &endpointDoc)
+				if endpointDoc.Owner != "" {
+					var endpointBucketName string
+					endpointBucketName = strings.Replace(json.ID, "/", "-", -1)
+					bucket, _ = cluster.OpenBucket(endpointBucketName, "")
 					_, _ = bucket.Replace(json.DocID, json.Doc, 0, 0)
 					c.JSON(200, gin.H{
 						"message": "document updated",
@@ -430,16 +430,16 @@ func main() {
 	})
 	r.POST("/delete", func(c *gin.Context) {
 		var json DataCRUD
-		var endpoint_doc EndpointDoc
+		var endpointDoc EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, _ := decodeAuthUserOrFail(json.Token)
 			if authed == true {
 				bucket, _ = cluster.OpenBucket("endpoints", "")
-				_, _ = bucket.Get(json.ID, &endpoint_doc)
-				if endpoint_doc.Owner != "" {
-					var endpoint_bucket_name string
-					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
-					bucket, _ = cluster.OpenBucket(endpoint_bucket_name, "")
+				_, _ = bucket.Get(json.ID, &endpointDoc)
+				if endpointDoc.Owner != "" {
+					var endpointBucketName string
+					endpointBucketName = strings.Replace(json.ID, "/", "-", -1)
+					bucket, _ = cluster.OpenBucket(endpointBucketName, "")
 					_, _ = bucket.Remove(json.DocID, 0)
 					c.JSON(200, gin.H{
 						"message": "document removed",
@@ -456,17 +456,17 @@ func main() {
 	})
 	r.POST("/get", func(c *gin.Context) {
 		var json DataCRUD
-		var endpoint_doc EndpointDoc
+		var endpointDoc EndpointDoc
 		var data_blob interface{}
 		if c.BindJSON(&json) == nil {
 			authed, _ := decodeAuthUserOrFail(json.Token)
 			if authed == true {
 				bucket, _ = cluster.OpenBucket("endpoints", "")
-				_, _ = bucket.Get(json.ID, &endpoint_doc)
-				if endpoint_doc.Owner != "" {
-					var endpoint_bucket_name string
-					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
-					bucket, _ = cluster.OpenBucket(endpoint_bucket_name, "")
+				_, _ = bucket.Get(json.ID, &endpointDoc)
+				if endpointDoc.Owner != "" {
+					var endpointBucketName string
+					endpointBucketName = strings.Replace(json.ID, "/", "-", -1)
+					bucket, _ = cluster.OpenBucket(endpointBucketName, "")
 					_, _ = bucket.Get(json.DocID, &data_blob)
 					c.JSON(200, data_blob)
 				}
