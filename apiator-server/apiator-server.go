@@ -18,6 +18,7 @@ var (
 	
 )
 const (
+	couchbaseServerAddr = "137.112.104.106"
 	redisServerAddr     = "apiator-3.csse.rose-hulman.edu:6379"
 	redisServerPassword = "AK1lTOuHyUNT5sN4JHP7"
 )
@@ -154,7 +155,7 @@ func main() {
 	var bucketerror error
 	var geterror error
 	var connecterror error
-	cluster, connecterror = gocb.Connect("137.112.104.106")
+	cluster, connecterror = gocb.Connect(couchbaseServerAddr)
 	r := gin.Default()
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
