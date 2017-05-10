@@ -151,6 +151,12 @@ func retrieveUserTokenRedis(username string) (string, error) {
 	return val, err
 }
 
+
+func bucketInsert(bucket *gocb.Bucket,document interface{},id string)(error){
+	_,err := bucket.Insert(id,document,0)
+	return err
+}
+
 func solrRetrieveAllUsers()(interface{},error){
 	s, err := solr.Init("localhost", 8983, "users")
 
