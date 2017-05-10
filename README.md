@@ -108,10 +108,12 @@ In the future the entire functional documentation will be available on this READ
 ### Contribution guidelines ###
 
 * Writing tests
+
 Please wait until development has stabalized before writing tests.
 
 <!-- * Code review -->
 * Push requests
+
 All push requests will be vetted by the apiator team.
 
 * Other guidelines
@@ -121,6 +123,8 @@ All push requests will be vetted by the apiator team.
 ### Who do I talk to? ###
 
 * Repo owner or admin
+
 Contact the owner of this repo.
 
-* Other community or team contact
+<!-- * Other community or team contact -->
+
