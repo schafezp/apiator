@@ -6,6 +6,7 @@ import (
 	"github.com/go-redis/redis"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/couchbase/gocb.v1"
+	"github.com/rtt/Go-Solr"
 	"gopkg.in/gin-gonic/gin.v1"
 	"io/ioutil"
 	"net/http"
@@ -150,6 +151,56 @@ func retrieveUserTokenRedis(username string) (string, error) {
 	return val, err
 }
 
+func solrRetrieveAllUsers()(interface{},error){
+	s, err := solr.Init("localhost", 8983, "users")
+
+	if err != nil{return nil,err}
+
+	q := solr.Query{
+		Params: solr.URLParamMap{
+			"q":           []string{"*:*"},
+		},
+	}
+	// perform the query, checking for errors
+	res, err := s.Select(&q)
+
+	if err != nil { return nil,err}
+	results := res.Results
+
+	for i := 0; i < results.Len(); i++ {
+		fmt.Println("Username:", results.Get(i).Field("username"))
+		fmt.Println("Password:", results.Get(i).Field("password"))
+
+		fmt.Println("")
+	}
+	return results,nil
+}
+
+func solrInsertUser(user *Login)(bool,error){
+	var resp *solr.UpdateResponse
+	var err error;
+	s, err := solr.Init("localhost", 8983, "users")
+
+	if err != nil{return false,err}
+
+	fmt.Println("User to insert:")
+	fmt.Println(user)
+	f := map[string]interface{}{
+		"add": []interface{}{
+			map[string]interface{}{"username": user.Username, "password": user.Password},
+		},
+	}
+		
+	resp, err = s.Update(f, true)
+
+	if err != nil {
+		return false,err
+	} else {
+		return resp.Success,err
+}
+	
+}
+
 func main() {
 	var cluster *gocb.Cluster
 	var bucket *gocb.Bucket
@@ -235,6 +286,34 @@ func main() {
 		c.JSON(200, gin.H{
 			"solr-message": string(body),
 		})
+	})
+	r.GET("/solr/getall", func(c *gin.Context) {
+		results,err := solrRetrieveAllUsers()
+
+		if err != nil{
+			c.JSON(400, gin.H{
+				"error retrieve users": results,
+			})
+		}else{
+			c.JSON(200, gin.H{
+			"users": results,
+		})
+		}
+	})
+	r.POST("/solr/insertuser", func(c *gin.Context) {
+
+		var form Login
+		c.Bind(&form)
+		result,err := solrInsertUser(&form)
+		if err != nil{
+			c.JSON(400, gin.H{
+				"error insert user": result,
+			})
+		}else{
+			c.JSON(200, gin.H{
+			"success: result": result,
+		})
+		}
 	})
 	r.POST("/auth", func(c *gin.Context) {
 		bucket, bucketerror = cluster.OpenBucket("users", "")
