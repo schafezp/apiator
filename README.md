@@ -6,19 +6,25 @@ This README documents how to set up and use this project.
 ### What is this repository for? ###
 
 * Quick summary
+
 Apiator provides a client/server infrastructure for dynamically generating api endpoints for document based models with high performance and providing data replication across any number of nodes.
+
 * Version
+
 This is an alpha version of apiator.
 
 ### How do I get set up? ###
 
 * Summary of set up
+
 This stack was developed with CentOs 7. Tested version numbers will be added before we mark the git repo as [passing](https://github.com/dwyl/repo-badges).
 
 Deploying this entire stack involves configuring Couchbase, Redis, and Solr.
-Both the server and the cli are writtin in Go, so you must set up a Go environment.
+
+Both the server and the cli are written in Go, so you must set up a Go environment.
 
 * Configuration
+
 [Here is a link to get Go setup](https://golang.org/doc/install)
 
 * Dependencies
@@ -29,7 +35,7 @@ Here is a link for installing [Couchbase](https://developer.couchbase.com/docume
 
 Here is a link for installing [Couchbase](https://developer.couchbase.com/documentation/server/current/install/install-linux.html) specifically on CentOS 7.
 
-Once you've started Couchbase, you should be able to go to localhost:8091 in the webbrowser to configure it. Create an admin username and password and then put those values as well as the address to the host in the apiator-server/apiator-server.go
+Once you've started Couchbase, you should be able to go to localhost:8091 in the web browser to configure it. Create an admin username and password and then put those values as well as the address to the host in the apiator-server/apiator-server.go
 
 In the future there will be a seperate config file that holds all server address/passwords.
 
