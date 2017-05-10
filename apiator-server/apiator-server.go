@@ -19,6 +19,7 @@ var (
 )
 const (
 	couchbaseServerAddr = "137.112.104.106"
+	solrServerAddr = "http://apiator-2.csse.rose-hulman.edu:8983"
 	redisServerAddr     = "apiator-3.csse.rose-hulman.edu:6379"
 	redisServerPassword = "AK1lTOuHyUNT5sN4JHP7"
 )
@@ -223,6 +224,7 @@ func main() {
 	})
 	r.GET("/solr/ping", func(c *gin.Context) {
 		resp, err := http.Get("http://apiator-2.csse.rose-hulman.edu:8983/solr/test/admin/ping")
+		resp, err := http.Get(solrServerAddr + "/solr/test/admin/ping")
 		if err != nil {
 			panic(err)
 		}
