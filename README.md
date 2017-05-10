@@ -44,6 +44,7 @@ Create users and endpoints data buckets through the ui. You can make the users b
 In the future we will offer the choice to dynamically generate users/endpoints buckets with sane defaults.
 
 * Redis configuration
+
 Here is a link for installing [Redis](https://www.linode.com/docs/databases/redis/deploy-redis-on-centos-7) on CentOs 7
 
 Make sure to set a password in /etc/redis.conf
@@ -53,6 +54,7 @@ In the future there will be seperate config file, and we will provide a default 
 
 
 * Solr configuration
+
 Here is a link for configuring [Solr](http://idroot.net/tutorials/how-to-install-apache-solr-on-centos-7/) on CentOs 7
 
 
