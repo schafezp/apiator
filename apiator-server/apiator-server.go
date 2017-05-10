@@ -315,6 +315,39 @@ func main() {
 		})
 		}
 	})
+	r.POST("/create-user" , func(c *gin.Context) {
+		bucket, bucketerror = cluster.OpenBucket("users", "")
+		if bucketerror != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to open couchbase bucket",
+			})
+		} else {
+			var form Login
+			c.Bind(&form)
+			username := form.Username
+			hashed,err := HashPassword(form.Password)
+			if err != nil{
+				c.JSON(402, gin.H{
+				"message": "request failed, unable to hash password",
+				})}
+			
+			form.Password = hashed
+			err = bucketInsert(bucket,form,username)
+			if err != nil{
+				c.JSON(402, gin.H{
+					"message": "request failed, unable to insert to couchbase bucket",
+					"err": err,
+				})} else {
+
+				c.JSON(200, gin.H{
+					"message": "insert successful",
+					"err": err,
+				})
+			}
+			
+
+		}
+	})
 	r.POST("/auth", func(c *gin.Context) {
 		bucket, bucketerror = cluster.OpenBucket("users", "")
 		if bucketerror != nil {
@@ -339,6 +372,10 @@ func main() {
 					couchpass["password"].(string))
 				if match == true {
 					token, _ := createJwtToken(username)
+					//TODO: Handle the case where REDIS is down when we try to do this
+					//append the failed value to a list rather than just fail
+					_ = storeUserTokenRedis(username, token)
+
 					c.JSON(200, gin.H{
 						"token":   token,
 						"expires": time.Now().Add(time.Minute),
@@ -374,10 +411,20 @@ func main() {
 				document = json.Doc
 				document.Owner = user
 				document.CreatedAt = time.Now().Format(time.RFC3339)
-				_, _ = bucket.Insert(json.ID, document, 0)
-				c.JSON(200, gin.H{
+				err := bucketInsert(bucket,document,json.ID)
+				if err != nil{
+					c.JSON(200, gin.H{
 					"message": "document inserted",
-				})
+					})
+				}else{
+					c.JSON(400, gin.H{
+					"message": "document insert failed",
+					})
+				}
+				
+				// _, _ = bucket.Insert(json.ID, document, 0)
+				
+				
 			} else {
 				c.JSON(401, gin.H{
 					"message": "unauthorized user!",
