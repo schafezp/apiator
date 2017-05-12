@@ -23,6 +23,9 @@ const (
 	solrServerAddr = "http://apiator-2.csse.rose-hulman.edu:8983"
 	redisServerAddr     = "apiator-3.csse.rose-hulman.edu:6379"
 	redisServerPassword = "AK1lTOuHyUNT5sN4JHP7"
+	solrServerHost = "localhost"
+	solrServerPort = 8983
+	solrCoreName = "gettingstarted"
 )
 
 type Login struct {
@@ -158,7 +161,7 @@ func bucketInsert(bucket *gocb.Bucket,document interface{},id string)(error){
 }
 
 func solrRetrieveAllUsers()(interface{},error){
-	s, err := solr.Init("localhost", 8983, "users")
+	s, err := solr.Init(solrServerHost, solrServerPort,solrCoreName)
 
 	if err != nil{return nil,err}
 
@@ -181,11 +184,37 @@ func solrRetrieveAllUsers()(interface{},error){
 	}
 	return results,nil
 }
+func solrRetrieveUsers(username string)(interface{},error){
+	s, err := solr.Init(solrServerHost, solrServerPort,solrCoreName)
+
+	if err != nil{return nil,err}
+
+	qstring := fmt.Sprintf("username:*%s*",username)
+	
+	q := solr.Query{
+		Params: solr.URLParamMap{
+			"q":           []string{qstring},
+		},
+	}
+	// perform the query, checking for errors
+	res, err := s.Select(&q)
+
+	if err != nil { return nil,err}
+	results := res.Results
+
+	for i := 0; i < results.Len(); i++ {
+		fmt.Println("Username:", results.Get(i).Field("username"))
+		fmt.Println("Password:", results.Get(i).Field("password"))
+
+		fmt.Println("")
+	}
+	return results,nil
+}
 
 func solrInsertUser(user *Login)(bool,error){
 	var resp *solr.UpdateResponse
 	var err error;
-	s, err := solr.Init("localhost", 8983, "users")
+	s, err := solr.Init(solrServerHost, solrServerPort, solrCoreName)
 
 	if err != nil{return false,err}
 
@@ -318,6 +347,20 @@ func main() {
 	})
 	r.GET("/solr/getall", func(c *gin.Context) {
 		results,err := solrRetrieveAllUsers()
+
+		if err != nil{
+			c.JSON(400, gin.H{
+				"error retrieve users": results,
+			})
+		}else{
+			c.JSON(200, gin.H{
+			"users": results,
+		})
+		}
+	})
+	r.GET("/solr/getuser/:username", func(c *gin.Context) {
+		var username = c.Param("username")
+		results,err := solrRetrieveUsers(username)
 
 		if err != nil{
 			c.JSON(400, gin.H{
