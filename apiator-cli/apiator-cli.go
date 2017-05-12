@@ -93,10 +93,11 @@ func main() {
 						fmt.Println("ERR: ", err)
 						// connection stays nil
 					} else {
-						fmt.Println("RESP: ", reflect.TypeOf(resp))
-						fmt.Println("RESP: ", reflect.TypeOf(resp.Body))
-						fmt.Println("RESP: ", resp.Body)
-						fmt.Println("RESP: ", resp.StatusCode)
+
+						// fmt.Println("RESP: ", reflect.TypeOf(resp))
+						// fmt.Println("RESP: ", reflect.TypeOf(resp.Body))
+						// fmt.Println("RESP: ", resp.Body)
+						// fmt.Println("RESP: ", resp.StatusCode)
 						if (resp.StatusCode == 200) {
 							
 							// accepted
@@ -108,8 +109,13 @@ func main() {
 								fmt.Println("RESP: ", jsonbytes)
 								connection = ConnectionData{host, AuthResponse{}}
 								json.Unmarshal(jsonbytes, &connection.auth)
-								fmt.Println("RESP: ", connection)
+								fmt.Println("Connected to host successfully: ", connection.host)
+								fmt.Println("Session expires: ", connection.auth.expires)
+
 							}
+						} else {
+							fmt.Println("Connection Rejected: ", resp.Body, resp.StatusCode)
+							return nil
 						}
 					}
 				}
@@ -463,6 +469,7 @@ func main() {
 		return nil
 	}
 	app.EnableBashCompletion = true
+<<<<<<< HEAD
 	
 	// ''' Test Post
 	// jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document": %s, "doc_id": "%s"}`, "epid", "connection.auth.token", "{}", "docid")
@@ -477,6 +484,8 @@ func main() {
 	// 	fmt.Println(resp)
 	// }
 	// '''
+=======
+>>>>>>> 5f99c8e661fb88b7c5a30cefa770e9e007aff9d6
 
 	app.Run(os.Args)
 }
