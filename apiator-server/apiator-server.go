@@ -204,8 +204,32 @@ func solrInsertUser(user *Login)(bool,error){
 	} else {
 		return resp.Success,err
 }
-	
 }
+// func solrInsertEndpoint(endpoint *EndpointDoc)(bool,error){
+// 	var resp *solr.UpdateResponse
+// 	var err error;
+// 	s, err := solr.Init("localhost", 8983, "users")
+
+// 	if err != nil{return false,err}
+
+// 	fmt.Println("User to insert:")
+// 	fmt.Println(endpoint)
+// 	//TODO: put apporopriate fields
+// 	// https://github.com/rtt/Go-Solr
+// 	f := map[string]interface{}{
+// 		"add": []interface{}{
+// 			map[string]interface{}{"username": user.Username, "password": user.Password},
+// 		},
+// 	}
+		
+// 	resp, err = s.Update(f, true)
+
+// 	if err != nil {
+// 		return false,err
+// 	} else {
+// 		return resp.Success,err
+// }
+// }
 
 func main() {
 	var cluster *gocb.Cluster
