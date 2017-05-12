@@ -106,7 +106,7 @@ func main() {
 								fmt.Println("IOERR:", err)
 								return nil
 							} else {
-								fmt.Println("RESP: ", jsonbytes)
+								// fmt.Println("RESP: ", jsonbytes)
 								connection = ConnectionData{host, AuthResponse{}}
 								json.Unmarshal(jsonbytes, &connection.auth)
 								fmt.Println("Connected to host successfully: ", connection.host)
