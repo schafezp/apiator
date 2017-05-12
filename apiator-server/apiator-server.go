@@ -125,9 +125,19 @@ func storeUserTokenRedis(username, jwt string) error {
 		Password: redisServerPassword,
 		DB:       0, // use default DB
 	})
-	client.SAdd("usernames", username)
+	err := client.SAdd("usernames", username).Err()
+	if err  != nil{
+		q1 := fmt.Sprintf("usernames %s",username)
+		go redisOperationFail(q1)
+	}
 	// client.SAdd("jwts",jwt)
-	err := client.Set(fmt.Sprintf("token_%s", username), jwt, 0).Err()
+	err = client.Set(fmt.Sprintf("token_%s", username), jwt, 0).Err()
+	if err != nil{
+		q2 := fmt.Sprintf("token_%s", username)
+		go redisOperationFail(q2)
+	}
+	
+	
 	return err
 }
 func resetUserTokenRedis(username string) error {
@@ -139,6 +149,15 @@ func resetUserTokenRedis(username string) error {
 	// sremerr := client.SRem("usernames", username).Err()
 	client.SRem("usernames", username)
 	err := storeUserTokenRedis(username,"")
+
+	if err != nil{
+		q1 := fmt.Sprintf("usernames %s",username)
+		q2 := fmt.Sprintf("token_%s", username)
+		go redisOperationFail(q1)
+		go redisOperationFail(q2)
+	}
+	
+	
 	return err
 }
 
@@ -157,6 +176,12 @@ func retrieveUserTokenRedis(username string) (string, error) {
 
 func bucketInsert(bucket *gocb.Bucket,document interface{},id string)(error){
 	_,err := bucket.Insert(id,document,0)
+	return err
+}
+
+// Use document.Username as key always
+func userBucketInsert(bucket *gocb.Bucket,document Login)(error){
+	_,err := bucket.Insert(document.Username,document,0)
 	return err
 }
 
@@ -209,6 +234,11 @@ func solrRetrieveUsers(username string)(interface{},error){
 		fmt.Println("")
 	}
 	return results,nil
+}
+
+//This function 
+func storeFailedOperation(){
+
 }
 
 func solrInsertUser(user *Login)(bool,error){
@@ -266,6 +296,8 @@ func main() {
 	var bucketerror error
 	var geterror error
 	var connecterror error
+	//start sync dbs asap
+	go syncdbs()
 	cluster, connecterror = gocb.Connect(couchbaseServerAddr)
 	r := gin.Default()
 	r.GET("/ping", func(c *gin.Context) {
@@ -300,12 +332,22 @@ func main() {
 	r.GET("/redis/reset-user-token/:username", func(c *gin.Context) {
 		var username = c.Param("username")
 		var err = resetUserTokenRedis(username)
-		c.JSON(200, gin.H{
+		if err != nil {
+			c.JSON(400, gin.H{
 			"redis-err": err,
 			// "redis-reset-err": reseterr,
 			"user":      username,
 			"jwt":       "reset: value nil",
 		})
+		}else{
+			c.JSON(200, gin.H{
+			"redis-err": err,
+			// "redis-reset-err": reseterr,
+			"user":      username,
+			"jwt":       "reset: value nil",
+		})
+		}
+		
 	})
 	r.GET("/redis/get-user-token/:username", func(c *gin.Context) {
 		var username = c.Param("username")
@@ -330,6 +372,13 @@ func main() {
 		c.JSON(200, gin.H{
 			"redis-err":   err,
 			"user-tokens": tokens,
+		})
+	})
+	//issues attempt to sync redis
+	r.GET("/redis/sync", func(c *gin.Context) {
+		go issueRedisSync()
+		c.JSON(200, gin.H{
+			"redis-message": "Start attempt to sync manually",
 		})
 	})
 	r.GET("/solr/ping", func(c *gin.Context) {
@@ -393,32 +442,36 @@ func main() {
 			c.JSON(402, gin.H{
 				"message": "request failed, unable to open couchbase bucket",
 			})
-		} else {
-			var form Login
-			c.Bind(&form)
-			username := form.Username
-			hashed,err := HashPassword(form.Password)
-			if err != nil{
-				c.JSON(402, gin.H{
-				"message": "request failed, unable to hash password",
-				})}
-			
-			form.Password = hashed
-			err = bucketInsert(bucket,form,username)
-			if err != nil{
-				c.JSON(402, gin.H{
-					"message": "request failed, unable to insert to couchbase bucket",
-					"err": err,
-				})} else {
-
-				c.JSON(200, gin.H{
-					"message": "insert successful",
-					"err": err,
-				})
-			}
-			
-
 		}
+		var form Login
+		c.Bind(&form)
+		// username := form.Username
+		hashed,err := HashPassword(form.Password)
+		if err != nil{
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to hash password",
+			})}
+		
+		form.Password = hashed
+		err = userBucketInsert(bucket,form)
+		if err != nil{
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to insert to couchbase bucket",
+				"err": err,
+			})}
+		_,err = solrInsertUser(&form)
+		if err != nil{
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to insert to couchbase bucket",
+				"err": err,
+			})
+		}
+		
+		c.JSON(200, gin.H{
+			"message": "insert successful",
+			"err": err,
+		})
+		
 	})
 	r.POST("/auth", func(c *gin.Context) {
 		bucket, bucketerror = cluster.OpenBucket("users", "")
@@ -430,6 +483,8 @@ func main() {
 			var cas gocb.Cas
 			var form Login
 			c.Bind(&form)
+			fmt.Println("Auth login received")
+			fmt.Println(form)
 			username := form.Username
 			password := form.Password
 			var couchpass map[string]interface{}
@@ -446,7 +501,10 @@ func main() {
 					token, _ := createJwtToken(username)
 					//TODO: Handle the case where REDIS is down when we try to do this
 					//append the failed value to a list rather than just fail
-					_ = storeUserTokenRedis(username, token)
+					 _ = storeUserTokenRedis(username, token)
+					// if err != nil{
+						
+					// }
 
 					c.JSON(200, gin.H{
 						"token":   token,
