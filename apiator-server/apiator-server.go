@@ -14,19 +14,92 @@ import (
 	"time"
 )
 
+
+// func handleCouchbaseError()
 var (
 	jwtSecret           = []byte("KHOzH8DJRHIPfC9Mq8yH")
+	operationsToApply = make(chan QueuedOperation)
+	syncRedis = make(chan int)
+	syncSolr = make(chan int)
+	quitSync = make(chan int)
 	
 )
 const (
-	couchbaseServerAddr = "137.112.104.106"
-	solrServerAddr = "http://apiator-2.csse.rose-hulman.edu:8983"
-	redisServerAddr     = "apiator-3.csse.rose-hulman.edu:6379"
-	redisServerPassword = "AK1lTOuHyUNT5sN4JHP7"
+	couchbaseServerAddr = "localhost:8091"
+	solrServerAddr = "127.0.0.1:8983"
+	redisServerAddr     = "localhost:6379"
+	redisServerPassword = ""
 	solrServerHost = "localhost"
 	solrServerPort = 8983
 	solrCoreName = "gettingstarted"
 )
+
+func redisOperationFail(operation string){
+	fmt.Printf("Redis operation failed: %s \n",operation)
+	operationsToApply <- QueuedOperation{DbType:1,Operation:operation}
+	fmt.Printf("Redis operation failed: %s \n",operation)
+}
+func issueRedisSync(){
+	syncRedis <- 1
+}
+
+//calling this function with go routine will sync the dbs
+// func syncdbs(syncRedis,syncSolr, quit chan int){
+func syncdbs(){
+	for {
+		select {
+		case _ = <-quitSync:
+			fmt.Println("Stop waiting to sync")
+			return
+			
+		case _ = <-syncRedis:
+			fmt.Println("Redis Sync Issued")
+		client := redis.NewClient(&redis.Options{
+		Addr:     redisServerAddr,
+		Password: redisServerPassword,
+			DB:       0, // use default DB
+		})
+			for op := range operationsToApply{
+				switch  op.DbType {
+			case 0://couchbase
+					fmt.Println("Don't handle couchbase queued ops'")
+					operationsToApply <- op
+
+				case 1://redis
+					fmt.Println("Run failed redis command: %s",op.Operation)
+					err := client.Eval(op.Operation,[]string{})
+					//TODO: putting back here is dangerous if too many "bad" redis commands stack up
+					if err != nil{//put it back
+						operationsToApply <- op
+					}
+					
+			case 2://solr
+					fmt.Println("Don't handle solr queued ops'")
+					operationsToApply<- op
+			default:
+			}
+			}
+			
+		}
+	}
+
+}
+
+//represents a redis operation to be performed
+type QueuedRedisOperation struct {
+	
+}
+//When SOLR or Redis is down and we receive a request we should store it rather than ignoring it
+//to store it we will use a channel of Queued Operations
+
+type QueuedOperation struct {
+		//TODO: make Databasetype be an enum type rather than int
+	//currently 0 -> couchbase
+	//          1 -> redis
+	//          2 -> solr
+	DbType int `form:"dbtype" json:"dbtype" binding:"required"`
+	Operation string `form:"operation" json:"operation" binding:"required"`
+}
 
 type Login struct {
 	Username string `form:"username" json:"username" binding:"required"`
