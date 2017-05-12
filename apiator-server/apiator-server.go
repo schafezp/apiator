@@ -304,8 +304,7 @@ func main() {
 		})
 	})
 	r.GET("/solr/ping", func(c *gin.Context) {
-		resp, err := http.Get("http://apiator-2.csse.rose-hulman.edu:8983/solr/test/admin/ping")
-		resp, err := http.Get(solrServerAddr + "/solr/test/admin/ping")
+		resp, err := http.Get(solrServerAddr + "/solr/admin/ping")
 		if err != nil {
 			panic(err)
 		}
