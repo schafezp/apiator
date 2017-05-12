@@ -457,19 +457,19 @@ func main() {
 	}
 	app.EnableBashCompletion = true
 	
-	''' Test Post
-	jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document": %s, "doc_id": "%s"}`, "epid", "connection.auth.token", "{}", "docid")
-	resp, err := postJSON(`http://httpbin.org/post`, jsonS)	
-	if (err != nil) {
-		fmt.Println(err)
-	} else {
-		fmt.Println("RESPONSE: ")
-		bbytes, e := ioutil.ReadAll(resp.Body)
-		if (e != nil) {panic(e)}
-		fmt.Println(string(bbytes))
-		fmt.Println(resp)
-	}
-	'''
+	// ''' Test Post
+	// jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document": %s, "doc_id": "%s"}`, "epid", "connection.auth.token", "{}", "docid")
+	// resp, err := postJSON(`http://httpbin.org/post`, jsonS)	
+	// if (err != nil) {
+	// 	fmt.Println(err)
+	// } else {
+	// 	fmt.Println("RESPONSE: ")
+	// 	bbytes, e := ioutil.ReadAll(resp.Body)
+	// 	if (e != nil) {panic(e)}
+	// 	fmt.Println(string(bbytes))
+	// 	fmt.Println(resp)
+	// }
+	// '''
 
 	app.Run(os.Args)
 }
