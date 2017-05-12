@@ -451,7 +451,7 @@ func main() {
 	r.GET("/redis/sync", func(c *gin.Context) {
 		go issueRedisSync()
 		c.JSON(200, gin.H{
-			"redis-message": "Start attempt to sync manually",
+			"solr-message": "Start attempt to sync manually",
 		})
 	})
 	r.GET("/solr/ping", func(c *gin.Context) {
@@ -609,6 +609,8 @@ func main() {
 		var document EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, user := decodeAuthUserOrFail(json.Token)
+			fmt.Println("Authed")
+			fmt.Println(json)
 			if authed == true {
 				bucket, _ = cluster.OpenBucket("endpoints", "")
 				document = json.Doc
