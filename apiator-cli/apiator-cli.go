@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"reflect"
 	"os"
 	"bufio"
 	"strings"
@@ -92,16 +93,22 @@ func main() {
 						fmt.Println("ERR: ", err)
 						// connection stays nil
 					} else {
-						fmt.Println("RESP: ", resp)
+						fmt.Println("RESP: ", reflect.TypeOf(resp))
+						fmt.Println("RESP: ", reflect.TypeOf(resp.Body))
+						fmt.Println("RESP: ", resp.Body)
+						fmt.Println("RESP: ", resp.StatusCode)
 						if (resp.StatusCode == 200) {
+							
 							// accepted
 							jsonbytes, err := ioutil.ReadAll(resp.Body)
 							if (err != nil) {
 								fmt.Println("IOERR:", err)
 								return nil
 							} else {
+								fmt.Println("RESP: ", jsonbytes)
 								connection = ConnectionData{host, AuthResponse{}}
 								json.Unmarshal(jsonbytes, &connection.auth)
+								fmt.Println("RESP: ", connection)
 							}
 						}
 					}
