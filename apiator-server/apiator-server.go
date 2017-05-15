@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/go-redis/redis"
+	"github.com/rtt/Go-Solr"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/couchbase/gocb.v1"
 	"gopkg.in/gin-gonic/gin.v1"
@@ -12,19 +13,97 @@ import (
 	"strings"
 	"time"
 )
+
 //investigate if these structs can be pulled into a constants.h type interface
 //similar to C
+
+// func handleCouchbaseError()
 var (
-	jwtSecret           = []byte("KHOzH8DJRHIPfC9Mq8yH")
-	cluster *gocb.Cluster
-	bucket *gocb.Bucket
-	err error
+	jwtSecret         = []byte("KHOzH8DJRHIPfC9Mq8yH")
+	operationsToApply = make(chan QueuedOperation)
+	syncRedis         = make(chan int)
+	syncSolr          = make(chan int)
+	quitSync          = make(chan int)
+	cluster           *gocb.Cluster
+	bucket            *gocb.Bucket
 )
 
 const (
-	redisServerAddr     = "apiator-3.csse.rose-hulman.edu:6379"
-	redisServerPassword = "AK1lTOuHyUNT5sN4JHP7"
+	couchbaseServerAddr = "localhost:8091"
+	solrServerAddr      = "127.0.0.1:8983"
+	redisServerAddr     = "localhost:6379"
+	redisServerPassword = ""
+	solrServerHost      = "localhost"
+	solrServerPort      = 8983
+	solrCoreName        = "gettingstarted"
 )
+
+func redisOperationFail(operation string) {
+	fmt.Printf("Redis operation failed: %s \n", operation)
+	operationsToApply <- QueuedOperation{DbType: 1, Operation: operation}
+	fmt.Printf("Redis operation failed: %s \n", operation)
+}
+func issueRedisSync() {
+	syncRedis <- 1
+}
+
+//calling this function with go routine will sync the dbs
+// func syncdbs(syncRedis,syncSolr, quit chan int){
+func syncdbs() {
+	for {
+		select {
+		case _ = <-quitSync:
+			fmt.Println("Stop waiting to sync")
+			return
+
+		case _ = <-syncRedis:
+			fmt.Println("Redis Sync Issued")
+			client := redis.NewClient(&redis.Options{
+				Addr:     redisServerAddr,
+				Password: redisServerPassword,
+				DB:       0, // use default DB
+			})
+			for op := range operationsToApply {
+				switch op.DbType {
+				case 0: //couchbase
+					fmt.Println("Don't handle couchbase queued ops'")
+					operationsToApply <- op
+
+				case 1: //redis
+					fmt.Println("Run failed redis command: %s", op.Operation)
+					err := client.Eval(op.Operation, []string{})
+					//TODO: putting back here is dangerous if too many "bad" redis commands stack up
+					if err != nil { //put it back
+						operationsToApply <- op
+					}
+
+				case 2: //solr
+					fmt.Println("Don't handle solr queued ops'")
+					operationsToApply <- op
+				default:
+				}
+			}
+
+		}
+	}
+
+}
+
+//represents a redis operation to be performed
+type QueuedRedisOperation struct {
+}
+
+//When SOLR or Redis is down and we receive a request we should store it rather than ignoring it
+//to store it we will use a channel of Queued Operations
+
+type QueuedOperation struct {
+	//TODO: make Databasetype be an enum type rather than int
+	//currently 0 -> couchbase
+	//          1 -> redis
+	//          2 -> solr
+	DbType    int    `form:"dbtype" json:"dbtype" binding:"required"`
+	Operation string `form:"operation" json:"operation" binding:"required"`
+}
 
 type Login struct {
 	Username string `form:"username" json:"username" binding:"required"`
@@ -32,10 +111,10 @@ type Login struct {
 }
 
 type EndpointCRUD struct {
-	ID    string      `json:"id" binding:"required"`
-	Token string      `json:"token" binding:"required"`
-	DomainID string   `json:"domain_id" binding:"required"`
-	Doc   EndpointDoc `json:"document"`
+	ID       string      `json:"id" binding:"required"`
+	Token    string      `json:"token" binding:"required"`
+	DomainID string      `json:"domain_id" binding:"required"`
+	Doc      EndpointDoc `json:"document"`
 }
 
 type EndpointDoc struct {
@@ -47,37 +126,37 @@ type EndpointDoc struct {
 }
 
 type DataCRUD struct {
-	ID    string      `json:"id" binding:"required"`
-	DomainID string   `json:"domain_id" binding:"required"`
-	Token string      `json:"token" binding:"required"`
-	Doc   interface{} `json:"document"`
-	DocID string      `json:"doc_id"`
+	ID       string      `json:"id" binding:"required"`
+	DomainID string      `json:"domain_id" binding:"required"`
+	Token    string      `json:"token" binding:"required"`
+	Doc      interface{} `json:"document"`
+	DocID    string      `json:"doc_id"`
 }
 
 type UserCRUD struct {
-	ID string `json:"id" binding:"required"`
-	Token string `json:"token" binding"required"`
-	Doc UserDoc `json:"document"`
+	ID    string  `json:"id" binding:"required"`
+	Token string  `json:"token" binding"required"`
+	Doc   UserDoc `json:"document"`
 }
 
 type UserDoc struct {
-	Domains []DomainDoc `json:"domains" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Domains  []DomainDoc `json:"domains" binding:"required"`
+	Password string      `json:"password" binding:"required"`
 }
 
 type DomainDoc struct {
-	DomainID string `json:"domain_id" binding:"required"`
-	Owner bool `json:"owner" binding:"required"`
+	DomainID  string               `json:"domain_id" binding:"required"`
+	Owner     bool                 `json:"owner" binding:"required"`
 	Endpoints []DomainEndpointsDoc `json:"endpoints" binding:"required"`
 }
 
 type DomainEndpointsDoc struct {
-	Name string `json:"name" binding:"required"`
-	Permissions int `json:"permissions" binding"required"`
+	Name        string `json:"name" binding:"required"`
+	Permissions int    `json:"permissions" binding"required"`
 }
 
 type DomainCRUD struct {
-	Token string `json:"token" binding:"required"`
+	Token    string `json:"token" binding:"required"`
 	DomainID string `json:"domain_id" binding:"required"`
 }
 
@@ -159,9 +238,18 @@ func storeUserTokenRedis(username, jwt string) error {
 		Password: redisServerPassword,
 		DB:       0, // use default DB
 	})
-	client.SAdd("usernames", username)
+	err := client.SAdd("usernames", username).Err()
+	if err != nil {
+		q1 := fmt.Sprintf("usernames %s", username)
+		go redisOperationFail(q1)
+	}
 	// client.SAdd("jwts",jwt)
-	err := client.Set(fmt.Sprintf("token_%s", username), jwt, 0).Err()
+	err = client.Set(fmt.Sprintf("token_%s", username), jwt, 0).Err()
+	if err != nil {
+		q2 := fmt.Sprintf("token_%s", username)
+		go redisOperationFail(q2)
+	}
+
 	return err
 }
 func resetUserTokenRedis(username string) error {
@@ -172,7 +260,15 @@ func resetUserTokenRedis(username string) error {
 	})
 	// sremerr := client.SRem("usernames", username).Err()
 	client.SRem("usernames", username)
-	err := storeUserTokenRedis(username,"")
+	err := storeUserTokenRedis(username, "")
+
+	if err != nil {
+		q1 := fmt.Sprintf("usernames %s", username)
+		q2 := fmt.Sprintf("token_%s", username)
+		go redisOperationFail(q1)
+		go redisOperationFail(q2)
+	}
+
 	return err
 }
 
@@ -204,7 +300,7 @@ func checkReadPermission(username, domain, endpoint string) (bool, error) {
 			endpoints := domain_doc.Endpoints
 			for _, endpoint_doc := range endpoints {
 				if endpoint == endpoint_doc.Name {
-					return endpoint_doc.Permissions & 1 > 0, nil
+					return endpoint_doc.Permissions&1 > 0, nil
 				}
 			}
 		}
@@ -228,7 +324,7 @@ func checkWritePermission(username, domain, endpoint string) (bool, error) {
 			endpoints := domain_doc.Endpoints
 			for _, endpoint_doc := range endpoints {
 				if endpoint == endpoint_doc.Name {
-					return endpoint_doc.Permissions & 2 > 0, nil
+					return endpoint_doc.Permissions&2 > 0, nil
 				}
 			}
 		}
@@ -254,7 +350,6 @@ func checkOwner(username, domain string) (bool, error) {
 	}
 	return false, nil
 }
-
 
 func createBucket(bucket_name string) (bool, error) {
 	var cluster_manager *gocb.ClusterManager
@@ -290,11 +385,10 @@ func updateUserEndpoints(username, domain, endpoint string) error {
 			endpoints := domain_doc.Endpoints
 			domain_doc.Endpoints = append(endpoints,
 				DomainEndpointsDoc{
-					Name:endpoint,
-					Permissions:3,
+					Name:        endpoint,
+					Permissions: 3,
 				})
 			user_doc.Domains[index].Endpoints = domain_doc.Endpoints
-			fmt.Println("Yo you made it here")
 		}
 	}
 	_, err = bucket.Replace(username, &user_doc,
@@ -304,9 +398,142 @@ func updateUserEndpoints(username, domain, endpoint string) error {
 	}
 	return nil
 }
+
+func bucketInsert(bucket *gocb.Bucket, document interface{}, id string) error {
+	_, err := bucket.Insert(id, document, 0)
+	return err
+}
+
+// Use document.Username as key always
+func userBucketInsert(bucket *gocb.Bucket, document Login) error {
+	_, err := bucket.Insert(document.Username, document, 0)
+	return err
+}
+
+func solrRetrieveAllUsers() (interface{}, error) {
+	s, err := solr.Init(solrServerHost, solrServerPort, solrCoreName)
+
+	if err != nil {
+		return nil, err
+	}
+
+	q := solr.Query{
+		Params: solr.URLParamMap{
+			"q": []string{"*:*"},
+		},
+	}
+	// perform the query, checking for errors
+	res, err := s.Select(&q)
+
+	if err != nil {
+		return nil, err
+	}
+	results := res.Results
+
+	for i := 0; i < results.Len(); i++ {
+		fmt.Println("Username:", results.Get(i).Field("username"))
+		fmt.Println("Password:", results.Get(i).Field("password"))
+
+		fmt.Println("")
+	}
+	return results, nil
+}
+func solrRetrieveUsers(username string) (interface{}, error) {
+	s, err := solr.Init(solrServerHost, solrServerPort, solrCoreName)
+
+	if err != nil {
+		return nil, err
+	}
+
+	qstring := fmt.Sprintf("username:*%s*", username)
+
+	q := solr.Query{
+		Params: solr.URLParamMap{
+			"q": []string{qstring},
+		},
+	}
+	// perform the query, checking for errors
+	res, err := s.Select(&q)
+
+	if err != nil {
+		return nil, err
+	}
+	results := res.Results
+
+	for i := 0; i < results.Len(); i++ {
+		fmt.Println("Username:", results.Get(i).Field("username"))
+		fmt.Println("Password:", results.Get(i).Field("password"))
+
+		fmt.Println("")
+	}
+	return results, nil
+}
+
+//This function
+func storeFailedOperation() {
+
+}
+
+func solrInsertUser(user *Login) (bool, error) {
+	var resp *solr.UpdateResponse
+	var err error
+	s, err := solr.Init(solrServerHost, solrServerPort, solrCoreName)
+
+	if err != nil {
+		return false, err
+	}
+
+	fmt.Println("User to insert:")
+	fmt.Println(user)
+	f := map[string]interface{}{
+		"add": []interface{}{
+			map[string]interface{}{"username": user.Username, "password": user.Password},
+		},
+	}
+
+	resp, err = s.Update(f, true)
+
+	if err != nil {
+		return false, err
+	} else {
+		return resp.Success, err
+	}
+}
+func solrInsertEndpoint(endpoint *EndpointDoc) (bool, error) {
+	var resp *solr.UpdateResponse
+	var err error
+	s, err := solr.Init(solrServerHost, solrServerPort, solrCoreName)
+
+	if err != nil {
+		return false, err
+	}
+
+	fmt.Println("User to insert:")
+	fmt.Println(endpoint)
+	//TODO: put apporopriate fields
+	// https://github.com/rtt/Go-Solr
+	f := map[string]interface{}{
+		"add": []interface{}{
+			map[string]interface{}{"owner": endpoint.Owner, "index": endpoint.Index, "indexed": endpoint.Indexed},
+		},
+	}
+
+	resp, err = s.Update(f, true)
+
+	if err != nil {
+		return false, err
+	} else {
+		return resp.Success, err
+	}
+}
+
 func main() {
-	//establish connection to main Couchbase server on bootup
-	cluster, err = gocb.Connect("137.112.104.106")
+	var bucketerror error
+	var geterror error
+	var connecterror error
+	//start sync dbs asap
+	go syncdbs()
+	cluster, connecterror = gocb.Connect(couchbaseServerAddr)
 	r := gin.Default()
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -340,28 +567,38 @@ func main() {
 	r.GET("/redis/reset-user-token/:username", func(c *gin.Context) {
 		var username = c.Param("username")
 		var err = resetUserTokenRedis(username)
-		c.JSON(200, gin.H{
-			"redis-err": err,
-			// "redis-reset-err": reseterr,
-			"user":      username,
-			"jwt":       "reset: value nil",
-		})
+		if err != nil {
+			c.JSON(400, gin.H{
+				"redis-err": err,
+				// "redis-reset-err": reseterr,
+				"user": username,
+				"jwt":  "reset: value nil",
+			})
+		} else {
+			c.JSON(200, gin.H{
+				"redis-err": err,
+				// "redis-reset-err": reseterr,
+				"user": username,
+				"jwt":  "reset: value nil",
+			})
+		}
+
 	})
 	r.GET("/redis/get-user-token/:username", func(c *gin.Context) {
 		var username = c.Param("username")
 		fmt.Println("username")
 		fmt.Println(username)
 		var token, err = retrieveUserTokenRedis(username)
-		if err != nil{
+		if err != nil {
 			c.JSON(200, gin.H{
-			"redis-err":  "could not find token for username",
-			"user-token": token,
-		})
-		}else {
+				"redis-err":  "could not find token for username",
+				"user-token": token,
+			})
+		} else {
 			c.JSON(200, gin.H{
-			"redis-err":  err,
-			"user-token": token,
-		})
+				"redis-err":  err,
+				"user-token": token,
+			})
 		}
 	})
 	r.GET("/redis/get-all-authed-users", func(c *gin.Context) {
@@ -371,8 +608,15 @@ func main() {
 			"user-tokens": tokens,
 		})
 	})
+	//issues attempt to sync redis
+	r.GET("/redis/sync", func(c *gin.Context) {
+		go issueRedisSync()
+		c.JSON(200, gin.H{
+			"solr-message": "Start attempt to sync manually",
+		})
+	})
 	r.GET("/solr/ping", func(c *gin.Context) {
-		resp, err := http.Get("http://apiator-2.csse.rose-hulman.edu:8983/solr/test/admin/ping")
+		resp, err := http.Get(solrServerAddr + "/solr/admin/ping")
 		if err != nil {
 			panic(err)
 		}
@@ -384,59 +628,140 @@ func main() {
 			"solr-message": string(body),
 		})
 	})
+	r.GET("/solr/getall", func(c *gin.Context) {
+		results, err := solrRetrieveAllUsers()
+
+		if err != nil {
+			c.JSON(400, gin.H{
+				"error retrieve users": results,
+			})
+		} else {
+			c.JSON(200, gin.H{
+				"users": results,
+			})
+		}
+	})
+	r.GET("/solr/getuser/:username", func(c *gin.Context) {
+		var username = c.Param("username")
+		results, err := solrRetrieveUsers(username)
+
+		if err != nil {
+			c.JSON(400, gin.H{
+				"error retrieve users": results,
+			})
+		} else {
+			c.JSON(200, gin.H{
+				"users": results,
+			})
+		}
+	})
+	r.POST("/solr/insertuser", func(c *gin.Context) {
+
+		var form Login
+		c.Bind(&form)
+		result, err := solrInsertUser(&form)
+		if err != nil {
+			c.JSON(400, gin.H{
+				"error insert user": result,
+			})
+		} else {
+			c.JSON(200, gin.H{
+				"success: result": result,
+			})
+		}
+	})
+	r.POST("/create-user", func(c *gin.Context) {
+		bucket, bucketerror = cluster.OpenBucket("users", "")
+		if bucketerror != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to open couchbase bucket",
+			})
+		}
+		var form Login
+		c.Bind(&form)
+		// username := form.Username
+		hashed, err := HashPassword(form.Password)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to hash password",
+			})
+		}
+
+		form.Password = hashed
+		err = userBucketInsert(bucket, form)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to insert to couchbase bucket",
+				"err":     err,
+			})
+		}
+		_, err = solrInsertUser(&form)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to insert to couchbase bucket",
+				"err":     err,
+			})
+		}
+
+		c.JSON(200, gin.H{
+			"message": "insert successful",
+			"err":     err,
+		})
+
+	})
 	r.POST("/auth", func(c *gin.Context) {
 		bucket, err = cluster.OpenBucket("users", "")
 		if err != nil {
 			c.JSON(402, gin.H{
-				"message": "request failed, unable to"+
+				"message": "request failed, unable to" +
 					"open couchbase bucket",
 				"error": err.Error(),
 			})
-		}
-
-		var form Login
-		c.Bind(&form)
-		username := form.Username
-		password := form.Password
-		var couchpass map[string]interface{}
-		_, err = bucket.Get(username, &couchpass)
-		if err != nil {
-			c.JSON(402, gin.H{
-				"message": "request failed, unable to"+
-					"get item by id: " + username,
-				"error": err.Error(),
-			})
-		}
-
-		match := CheckPasswordHash(password,
-			couchpass["password"].(string))
-		if match == true {
-			//functionally a reset call as well
-			token, _ := createJwtToken(username)
-			err = resetUserTokenRedis(username)
-			if err != nil {
-				c.JSON(403, gin.H{
-					"message": "request failed, unable to"+
-						"reset user token on Redis",
-					"error": err.Error(),
-				})
-			}
-			err = storeUserTokenRedis(username, token)
-			if err != nil {
-				c.JSON(403, gin.H{
-					"message": "request failed, unable to"+
-						"store user token on Redis",
-					"error": err.Error(),
-				})
-			}
-
-			c.JSON(200, gin.H{
-				"token":   token,
-			})
 		} else {
-			c.JSON(401, gin.H{
-				"message": "authorization denied",
-			})
+			var form Login
+			c.Bind(&form)
+			username := form.Username
+			password := form.Password
+			var couchpass map[string]interface{}
+			_, err = bucket.Get(username, &couchpass)
+			if err != nil {
+				c.JSON(402, gin.H{
+					"message": "request failed, unable to" +
+						"get item by id: " + username,
+					"error": err.Error(),
+				})
+			}
+
+			match := CheckPasswordHash(password,
+				couchpass["password"].(string))
+			if match == true {
+				//functionally a reset call as well
+				token, _ := createJwtToken(username)
+				err = resetUserTokenRedis(username)
+				if err != nil {
+					c.JSON(403, gin.H{
+						"message": "request failed, unable to" +
+							"reset user token on Redis",
+						"error": err.Error(),
+					})
+				}
+				err = storeUserTokenRedis(username, token)
+				if err != nil {
+					c.JSON(403, gin.H{
+						"message": "request failed, unable to" +
+							"store user token on Redis",
+						"error": err.Error(),
+					})
+				}
+
+				c.JSON(200, gin.H{
+					"token": token,
+				})
+			} else {
+				c.JSON(401, gin.H{
+					"message": "authorization denied",
+				})
+			}
 		}
 	})
 	r.GET("/authed-ping", func(c *gin.Context) {
@@ -463,8 +788,8 @@ func main() {
 					"")
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "unable to connect"+
-						" to endpoints bucket",
+						"message": "unable to connect" +
+							" to endpoints bucket",
 						"error": err.Error(),
 					})
 				}
@@ -472,8 +797,8 @@ func main() {
 				_, err = bucket.Get(bucket_id, &document)
 				if err == nil {
 					c.JSON(403, gin.H{
-						"message": "endpoint already"+
-						"exists!",
+						"message": "endpoint already" +
+							"exists!",
 					})
 				}
 				document = json.Doc
@@ -482,7 +807,7 @@ func main() {
 				_, err = bucket.Insert(bucket_id, document, 0)
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "failed to insert"+
+						"message": "failed to insert" +
 							"endpoint" + bucket_id,
 						"error": err.Error(),
 					})
@@ -490,14 +815,11 @@ func main() {
 				err = updateUserEndpoints(user, json.DomainID, json.ID)
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "failed to update"+
+						"message": "failed to update" +
 							"user endpoints",
 						"error": err.Error(),
 					})
 				}
-				c.JSON(200, gin.H{
-					"message": "document inserted",
-				})
 			} else {
 				c.JSON(401, gin.H{
 					"message": "unauthorized user!",
@@ -506,7 +828,7 @@ func main() {
 		} else {
 			c.JSON(400, gin.H{
 				"message": "error binding JSON to variable",
-				"error": err.Error(),
+				"error":   err.Error(),
 			})
 		}
 
@@ -523,15 +845,15 @@ func main() {
 				bucket, err = cluster.OpenBucket("endpoints", "")
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "unable to connect"+
-						" to endpoints bucket",
+						"message": "unable to connect" +
+							" to endpoints bucket",
 						"error": err.Error(),
 					})
 				}
 				_, err = bucket.Get(bucket_id, &document)
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "failed to retrieve"+
+						"message": "failed to retrieve" +
 							"endpoint" + bucket_id,
 						"error": err.Error(),
 					})
@@ -545,7 +867,7 @@ func main() {
 		} else {
 			c.JSON(400, gin.H{
 				"message": "error binding JSON to variable",
-				"error": err.Error(),
+				"error":   err.Error(),
 			})
 		}
 	})
@@ -558,8 +880,8 @@ func main() {
 				bucket, err = cluster.OpenBucket("endpoints", "")
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "unable to connect"+
-						" to endpoints bucket",
+						"message": "unable to connect" +
+							" to endpoints bucket",
 						"error": err.Error(),
 					})
 				}
@@ -567,7 +889,7 @@ func main() {
 				_, err = bucket.Remove(bucket_id, 0)
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "failed to delete"+
+						"message": "failed to delete" +
 							"endpoint" + bucket_id,
 						"error": err.Error(),
 					})
@@ -593,8 +915,8 @@ func main() {
 				bucket, err = cluster.OpenBucket("endpoints", "")
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "unable to connect"+
-						" to endpoints bucket",
+						"message": "unable to connect" +
+							" to endpoints bucket",
 						"error": err.Error(),
 					})
 				}
@@ -603,8 +925,8 @@ func main() {
 				_, err = bucket.Get(bucket_id, &db_document)
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "unable to connect"+
-						" to endpoints bucket",
+						"message": "unable to connect" +
+							" to endpoints bucket",
 						"error": err.Error(),
 					})
 				}
@@ -613,8 +935,8 @@ func main() {
 				_, err = bucket.Replace(bucket_id, document, 0, 0)
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "error updating"+
-						"endpoint document:"+bucket_id,
+						"message": "error updating" +
+							"endpoint document:" + bucket_id,
 						"error": err.Error(),
 					})
 				}
@@ -632,6 +954,8 @@ func main() {
 		var json DataCRUD
 		var endpoint_doc EndpointDoc
 		var bucket_check bool
+		var err error
+		var clusterManager *gocb.ClusterManager
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			if authed == true {
@@ -639,7 +963,7 @@ func main() {
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to open endpoints bucket!",
-						"error": err.Error(),
+						"error":   err.Error(),
 					})
 				}
 				bucket_id := json.DomainID + json.ID
@@ -647,7 +971,7 @@ func main() {
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to fetch endpoint_doc!",
-						"error": err.Error(),
+						"error":   err.Error(),
 					})
 				}
 				if valid, _ := checkWritePermission(authUser, json.DomainID, json.ID); valid {
@@ -662,7 +986,7 @@ func main() {
 						} else {
 							c.JSON(402, gin.H{
 								"message": "unable to open bucket!",
-								"error": err.Error(),
+								"error":   err.Error(),
 							})
 						}
 					}
@@ -672,14 +996,14 @@ func main() {
 					if err != nil {
 						c.JSON(402, gin.H{
 							"message": "unable to open bucket!",
-							"error": err.Error(),
+							"error":   err.Error(),
 						})
 					}
 					_, err = bucket.Insert(json.DocID, json.Doc, 0)
 					if err != nil {
 						c.JSON(402, gin.H{
 							"message": "unable to insert document!",
-							"error": err.Error(),
+							"error":   err.Error(),
 						})
 					}
 					c.JSON(200, gin.H{
@@ -703,7 +1027,7 @@ func main() {
 	})
 	r.POST("/update", func(c *gin.Context) {
 		var json DataCRUD
-		var endpoint_doc EndpointDoc
+		var endpointDoc EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			if authed == true {
@@ -711,7 +1035,7 @@ func main() {
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to open endpoints bucket!",
-						"error": err.Error(),
+						"error":   err.Error(),
 					})
 				}
 				bucket_id := json.DomainID + json.ID
@@ -719,7 +1043,7 @@ func main() {
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to fetch endpoint_doc!",
-						"error": err.Error(),
+						"error":   err.Error(),
 					})
 				}
 				has_write_permission, _ := checkWritePermission(authUser, json.DomainID, json.ID)
@@ -732,19 +1056,16 @@ func main() {
 					if err != nil {
 						c.JSON(402, gin.H{
 							"message": "unable to open bucket!",
-							"error": err.Error(),
+							"error":   err.Error(),
 						})
 					}
 					_, err = bucket.Replace(json.DocID, json.Doc, 0, 0)
 					if err != nil {
 						c.JSON(402, gin.H{
 							"message": "unable to update document!",
-							"error": err.Error(),
+							"error":   err.Error(),
 						})
 					}
-					c.JSON(200, gin.H{
-						"message": "document updated",
-					})
 				} else {
 					c.JSON(401, gin.H{
 						"message": "unauthorized user!",
@@ -763,7 +1084,7 @@ func main() {
 	})
 	r.POST("/delete", func(c *gin.Context) {
 		var json DataCRUD
-		var endpoint_doc EndpointDoc
+		var endpointDoc EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			if authed == true {
@@ -772,14 +1093,14 @@ func main() {
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to open endpoints bucket!",
-						"error": err.Error(),
+						"error":   err.Error(),
 					})
 				}
 				_, err = bucket.Get(bucket_id, &endpoint_doc)
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to fetch endpoint_doc!",
-						"error": err.Error(),
+						"error":   err.Error(),
 					})
 				}
 				has_write_permission, _ := checkWritePermission(authUser, json.DomainID, json.ID)
@@ -791,22 +1112,19 @@ func main() {
 					if err != nil {
 						c.JSON(402, gin.H{
 							"message": "unable to open bucket!",
-							"error": err.Error(),
+							"error":   err.Error(),
 						})
 					}
 					_, err = bucket.Remove(json.DocID, 0)
 					if err != nil {
 						c.JSON(402, gin.H{
 							"message": "unable to remove document!",
-							"error": err.Error(),
+							"error":   err.Error(),
 						})
 					}
-					c.JSON(200, gin.H{
-						"message": "document updated",
-					})
-				} else{
+				} else {
 					c.JSON(401, gin.H{
-					"message": "unauthorized user!",
+						"message": "unauthorized user!",
 					})
 				}
 			} else {
@@ -822,7 +1140,7 @@ func main() {
 	})
 	r.POST("/get", func(c *gin.Context) {
 		var json DataCRUD
-		var endpoint_doc EndpointDoc
+		var endpointDoc EndpointDoc
 		var data_blob interface{}
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
@@ -831,7 +1149,7 @@ func main() {
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to open endpoints bucket!",
-						"error": err.Error(),
+						"error":   err.Error(),
 					})
 				}
 				bucket_id := json.DomainID + json.ID
@@ -839,7 +1157,7 @@ func main() {
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to fetch endpoint_doc!",
-						"error": err.Error(),
+						"error":   err.Error(),
 					})
 				}
 				if valid, _ := checkReadPermission(authUser, json.DomainID, json.ID); valid {
@@ -850,21 +1168,21 @@ func main() {
 					if err != nil {
 						c.JSON(402, gin.H{
 							"message": "unable to open bucket!",
-							"error": err.Error(),
+							"error":   err.Error(),
 						})
 					}
 					bucket, err = cluster.OpenBucket(endpoint_bucket_name, "")
 					if err != nil {
 						c.JSON(402, gin.H{
 							"message": "unable to open bucket!",
-							"error": err.Error(),
+							"error":   err.Error(),
 						})
 					}
 					_, err = bucket.Get(json.DocID, &data_blob)
 					if err != nil {
 						c.JSON(402, gin.H{
 							"message": "unable to get document!",
-							"error": err.Error(),
+							"error":   err.Error(),
 						})
 					}
 					c.JSON(200, data_blob)
@@ -894,31 +1212,31 @@ func main() {
 				bucket, err = cluster.OpenBucket("users", "")
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "unable to connect"+
-						" to users bucket",
+						"message": "unable to connect" +
+							" to users bucket",
 						"error": err.Error(),
 					})
 				}
 				_, err = bucket.Get(authUser, &user_doc)
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "unable to retrieve"+
-						"user: "+authUser,
+						"message": "unable to retrieve" +
+							"user: " + authUser,
 						"error": err.Error(),
 					})
 				}
 				user_doc.Domains = append(user_doc.Domains,
 					DomainDoc{
-						DomainID: json.DomainID,
-						Owner: true,
+						DomainID:  json.DomainID,
+						Owner:     true,
 						Endpoints: []DomainEndpointsDoc{},
 					})
 				_, err = bucket.Replace(authUser, &user_doc,
 					0, 0)
 				if err != nil {
 					c.JSON(402, gin.H{
-						"message": "unable to update"+
-						"user: "+authUser,
+						"message": "unable to update" +
+							"user: " + authUser,
 						"error": err.Error(),
 					})
 				}

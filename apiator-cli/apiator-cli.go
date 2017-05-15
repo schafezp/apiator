@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	// "reflect"
 	"os"
 	"bufio"
 	"strings"
@@ -92,17 +93,29 @@ func main() {
 						fmt.Println("ERR: ", err)
 						// connection stays nil
 					} else {
-						fmt.Println("RESP: ", resp)
+
+						// fmt.Println("RESP: ", reflect.TypeOf(resp))
+						// fmt.Println("RESP: ", reflect.TypeOf(resp.Body))
+						// fmt.Println("RESP: ", resp.Body)
+						// fmt.Println("RESP: ", resp.StatusCode)
 						if (resp.StatusCode == 200) {
+							
 							// accepted
 							jsonbytes, err := ioutil.ReadAll(resp.Body)
 							if (err != nil) {
 								fmt.Println("IOERR:", err)
 								return nil
 							} else {
+								// fmt.Println("RESP: ", jsonbytes)
 								connection = ConnectionData{host, AuthResponse{}}
 								json.Unmarshal(jsonbytes, &connection.auth)
+								fmt.Println("Connected to host successfully: ", connection.host)
+								fmt.Println("Session expires: ", connection.auth.expires)
+
 							}
+						} else {
+							fmt.Println("Connection Rejected: ", resp.Body, resp.StatusCode)
+							return nil
 						}
 					}
 				}
@@ -456,20 +469,5 @@ func main() {
 		return nil
 	}
 	app.EnableBashCompletion = true
-	
-	''' Test Post
-	jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document": %s, "doc_id": "%s"}`, "epid", "connection.auth.token", "{}", "docid")
-	resp, err := postJSON(`http://httpbin.org/post`, jsonS)	
-	if (err != nil) {
-		fmt.Println(err)
-	} else {
-		fmt.Println("RESPONSE: ")
-		bbytes, e := ioutil.ReadAll(resp.Body)
-		if (e != nil) {panic(e)}
-		fmt.Println(string(bbytes))
-		fmt.Println(resp)
-	}
-	'''
-
 	app.Run(os.Args)
 }
