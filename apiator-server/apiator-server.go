@@ -6,7 +6,6 @@ import (
 	"github.com/go-redis/redis"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/couchbase/gocb.v1"
-	"github.com/rtt/Go-Solr"
 	"gopkg.in/gin-gonic/gin.v1"
 	"io/ioutil"
 	"net/http"
@@ -14,30 +13,25 @@ import (
 	"time"
 )
 
-
+//local user defined packages
+import "./dbsolr"
+import "./config"
+import "./endpoint"
 // func handleCouchbaseError()
 var (
 	jwtSecret           = []byte("KHOzH8DJRHIPfC9Mq8yH")
+	conf = config.GetConfig()
 	operationsToApply = make(chan QueuedOperation)
 	syncRedis = make(chan int)
 	syncSolr = make(chan int)
 	quitSync = make(chan int)
 	
 )
-const (
-	couchbaseServerAddr = "localhost:8091"
-	solrServerAddr = "127.0.0.1:8983"
-	redisServerAddr     = "localhost:6379"
-	redisServerPassword = ""
-	solrServerHost = "localhost"
-	solrServerPort = 8983
-	solrCoreName = "gettingstarted"
-)
 
 func redisOperationFail(operation string){
 	fmt.Printf("Redis operation failed: %s \n",operation)
 	operationsToApply <- QueuedOperation{DbType:1,Operation:operation}
-	fmt.Printf("Redis operation failed: %s \n",operation)
+	// fmt.Printf("Redis operation failed: %s \n",operation)
 }
 func issueRedisSync(){
 	syncRedis <- 1
@@ -55,29 +49,30 @@ func syncdbs(){
 		case _ = <-syncRedis:
 			fmt.Println("Redis Sync Issued")
 		client := redis.NewClient(&redis.Options{
-		Addr:     redisServerAddr,
-		Password: redisServerPassword,
+		Addr:     conf.RedisServerAddr,
+		Password: conf.RedisServerPassword,
 			DB:       0, // use default DB
 		})
 			for op := range operationsToApply{
 				switch  op.DbType {
-			case 0://couchbase
+				case 0://couchbase
 					fmt.Println("Don't handle couchbase queued ops'")
 					operationsToApply <- op
 
 				case 1://redis
 					fmt.Println("Run failed redis command: %s",op.Operation)
+					fmt.Println(op.Operation)
 					err := client.Eval(op.Operation,[]string{})
 					//TODO: putting back here is dangerous if too many "bad" redis commands stack up
 					if err != nil{//put it back
 						operationsToApply <- op
 					}
 					
-			case 2://solr
+				case 2://solr
 					fmt.Println("Don't handle solr queued ops'")
 					operationsToApply<- op
-			default:
-			}
+				default:
+				}
 			}
 			
 		}
@@ -85,13 +80,14 @@ func syncdbs(){
 
 }
 
-//represents a redis operation to be performed
+//QueuedRedisOperation represents a redis operation to be performed
 type QueuedRedisOperation struct {
 	
 }
 //When SOLR or Redis is down and we receive a request we should store it rather than ignoring it
 //to store it we will use a channel of Queued Operations
 
+//QueuedOperation represents a queued instruction to preform 
 type QueuedOperation struct {
 		//TODO: make Databasetype be an enum type rather than int
 	//currently 0 -> couchbase
@@ -99,25 +95,6 @@ type QueuedOperation struct {
 	//          2 -> solr
 	DbType int `form:"dbtype" json:"dbtype" binding:"required"`
 	Operation string `form:"operation" json:"operation" binding:"required"`
-}
-
-type Login struct {
-	Username string `form:"username" json:"username" binding:"required"`
-	Password string `form:"password" json:"password" binding:"required"`
-}
-
-type EndpointCRUD struct {
-	ID    string      `json:"id" binding:"required"`
-	Token string      `json:"token" binding:"required"`
-	Doc   EndpointDoc `json:"document"`
-}
-
-type EndpointDoc struct {
-	HTTPRequestTypes []string `json:"request_types"`
-	Owner            string   `json:"owner"`
-	Indexed          bool     `json:"indexed"`
-	Index            string   `json:"index"`
-	CreatedAt        string   `json:"created_at"`
 }
 
 type DataCRUD struct {
@@ -168,8 +145,8 @@ func decodeAuthUserOrFail(authToken string) (bool, string) {
 }
 func PingRedis() (string, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     redisServerAddr,
-		Password: redisServerPassword,
+		Addr:     conf.RedisServerAddr,
+		Password: conf.RedisServerPassword,
 		DB:       0, // use default DB
 	})
 
@@ -182,8 +159,8 @@ func PingRedis() (string, error) {
 //retrieve all usernames that have tokens currently
 func retrieveAllAuthedUsersRedis() ([]string, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     redisServerAddr,
-		Password: redisServerPassword,
+		Addr:     conf.RedisServerAddr,
+		Password: conf.RedisServerPassword,
 		DB:       0, // use default DB
 	})
 
@@ -194,19 +171,19 @@ func retrieveAllAuthedUsersRedis() ([]string, error) {
 //Store a given jwt user token in redis
 func storeUserTokenRedis(username, jwt string) error {
 	client := redis.NewClient(&redis.Options{
-		Addr:     redisServerAddr,
-		Password: redisServerPassword,
+		Addr:     conf.RedisServerAddr,
+		Password: conf.RedisServerPassword,
 		DB:       0, // use default DB
 	})
 	err := client.SAdd("usernames", username).Err()
 	if err  != nil{
-		q1 := fmt.Sprintf("usernames %s",username)
+		q1 := fmt.Sprintf("sadd usernames %s",username)
 		go redisOperationFail(q1)
 	}
 	// client.SAdd("jwts",jwt)
 	err = client.Set(fmt.Sprintf("token_%s", username), jwt, 0).Err()
 	if err != nil{
-		q2 := fmt.Sprintf("token_%s", username)
+		q2 := fmt.Sprintf("set token_%s %s", username,jwt)
 		go redisOperationFail(q2)
 	}
 	
@@ -215,8 +192,8 @@ func storeUserTokenRedis(username, jwt string) error {
 }
 func resetUserTokenRedis(username string) error {
 	client := redis.NewClient(&redis.Options{
-		Addr:     redisServerAddr,
-		Password: redisServerPassword,
+		Addr:     conf.RedisServerAddr,
+		Password: conf.RedisServerPassword,
 		DB:       0, // use default DB
 	})
 	// sremerr := client.SRem("usernames", username).Err()
@@ -237,8 +214,8 @@ func resetUserTokenRedis(username string) error {
 //retrieve the jwt of a user in  a given jwt user token in redis
 func retrieveUserTokenRedis(username string) (string, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     redisServerAddr,
-		Password: redisServerPassword,
+		Addr:     conf.RedisServerAddr,
+		Password: conf.RedisServerPassword,
 		DB:       0, // use default DB
 	})
 
@@ -253,115 +230,19 @@ func bucketInsert(bucket *gocb.Bucket,document interface{},id string)(error){
 }
 
 // Use document.Username as key always
-func userBucketInsert(bucket *gocb.Bucket,document Login)(error){
+func userBucketInsert(bucket *gocb.Bucket,document endpoint.Login)(error){
 	_,err := bucket.Insert(document.Username,document,0)
 	return err
 }
 
-func solrRetrieveAllUsers()(interface{},error){
-	s, err := solr.Init(solrServerHost, solrServerPort,solrCoreName)
 
-	if err != nil{return nil,err}
-
-	q := solr.Query{
-		Params: solr.URLParamMap{
-			"q":           []string{"*:*"},
-		},
-	}
-	// perform the query, checking for errors
-	res, err := s.Select(&q)
-
-	if err != nil { return nil,err}
-	results := res.Results
-
-	for i := 0; i < results.Len(); i++ {
-		fmt.Println("Username:", results.Get(i).Field("username"))
-		fmt.Println("Password:", results.Get(i).Field("password"))
-
-		fmt.Println("")
-	}
-	return results,nil
-}
-func solrRetrieveUsers(username string)(interface{},error){
-	s, err := solr.Init(solrServerHost, solrServerPort,solrCoreName)
-
-	if err != nil{return nil,err}
-
-	qstring := fmt.Sprintf("username:*%s*",username)
-	
-	q := solr.Query{
-		Params: solr.URLParamMap{
-			"q":           []string{qstring},
-		},
-	}
-	// perform the query, checking for errors
-	res, err := s.Select(&q)
-
-	if err != nil { return nil,err}
-	results := res.Results
-
-	for i := 0; i < results.Len(); i++ {
-		fmt.Println("Username:", results.Get(i).Field("username"))
-		fmt.Println("Password:", results.Get(i).Field("password"))
-
-		fmt.Println("")
-	}
-	return results,nil
-}
 
 //This function 
 func storeFailedOperation(){
 
 }
 
-func solrInsertUser(user *Login)(bool,error){
-	var resp *solr.UpdateResponse
-	var err error;
-	s, err := solr.Init(solrServerHost, solrServerPort, solrCoreName)
 
-	if err != nil{return false,err}
-
-	fmt.Println("User to insert:")
-	fmt.Println(user)
-	f := map[string]interface{}{
-		"add": []interface{}{
-			map[string]interface{}{"username": user.Username, "password": user.Password},
-		},
-	}
-		
-	resp, err = s.Update(f, true)
-
-	if err != nil {
-		return false,err
-	} else {
-		return resp.Success,err
-}
-}
-func solrInsertEndpoint(endpoint *EndpointDoc)(bool,error){
-	var resp *solr.UpdateResponse
-	var err error;
-	s, err := solr.Init(solrServerHost, solrServerPort, solrCoreName)
-
-	if err != nil{return false,err}
-
-	fmt.Println("User to insert:")
-	fmt.Println(endpoint)
-	//TODO: put apporopriate fields
-	// https://github.com/rtt/Go-Solr
-	f := map[string]interface{}{
-		"add": []interface{}{
-			map[string]interface{}{"owner": endpoint.Owner, "index": endpoint.Index,"indexed": endpoint.Indexed},
-		},
-	}
-		
-	resp, err = s.Update(f, true)
-
-	if err != nil {
-		return false,err
-	} else {
-		return resp.Success,err
-}
-}
 
 func main() {
 	var cluster *gocb.Cluster
@@ -371,7 +252,7 @@ func main() {
 	var connecterror error
 	//start sync dbs asap
 	go syncdbs()
-	cluster, connecterror = gocb.Connect(couchbaseServerAddr)
+	cluster, connecterror = gocb.Connect(conf.CouchbaseServerAddr)
 	r := gin.Default()
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -410,7 +291,6 @@ func main() {
 			"redis-err": err,
 			// "redis-reset-err": reseterr,
 			"user":      username,
-			"jwt":       "reset: value nil",
 		})
 		}else{
 			c.JSON(200, gin.H{
@@ -454,8 +334,9 @@ func main() {
 			"solr-message": "Start attempt to sync manually",
 		})
 	})
+	//TODO: not tested w solrserverhost
 	r.GET("/solr/ping", func(c *gin.Context) {
-		resp, err := http.Get(solrServerAddr + "/solr/admin/ping")
+		resp, err := http.Get(conf.SolrServerHost + "/solr/admin/ping")
 		if err != nil {
 			panic(err)
 		}
@@ -468,7 +349,7 @@ func main() {
 		})
 	})
 	r.GET("/solr/getall", func(c *gin.Context) {
-		results,err := solrRetrieveAllUsers()
+		results,err := dbsolr.SolrRetrieveAllUsers()
 
 		if err != nil{
 			c.JSON(400, gin.H{
@@ -482,7 +363,7 @@ func main() {
 	})
 	r.GET("/solr/getuser/:username", func(c *gin.Context) {
 		var username = c.Param("username")
-		results,err := solrRetrieveUsers(username)
+		results,err := dbsolr.SolrRetrieveUsers(username)
 
 		if err != nil{
 			c.JSON(400, gin.H{
@@ -496,9 +377,9 @@ func main() {
 	})
 	r.POST("/solr/insertuser", func(c *gin.Context) {
 
-		var form Login
+		var form endpoint.Login
 		c.Bind(&form)
-		result,err := solrInsertUser(&form)
+		result,err := dbsolr.SolrInsertUser(&form)
 		if err != nil{
 			c.JSON(400, gin.H{
 				"error insert user": result,
@@ -516,7 +397,7 @@ func main() {
 				"message": "request failed, unable to open couchbase bucket",
 			})
 		}
-		var form Login
+		var form endpoint.Login
 		c.Bind(&form)
 		// username := form.Username
 		hashed,err := HashPassword(form.Password)
@@ -532,7 +413,7 @@ func main() {
 				"message": "request failed, unable to insert to couchbase bucket",
 				"err": err,
 			})}
-		_,err = solrInsertUser(&form)
+		_,err = dbsolr.SolrInsertUser(&form)
 		if err != nil{
 			c.JSON(402, gin.H{
 				"message": "request failed, unable to insert to couchbase bucket",
@@ -554,7 +435,7 @@ func main() {
 			})
 		} else {
 			var cas gocb.Cas
-			var form Login
+			var form endpoint.Login
 			c.Bind(&form)
 			fmt.Println("Auth login received")
 			fmt.Println(form)
@@ -605,8 +486,8 @@ func main() {
 		}
 	})
 	r.POST("/create-endpoint", func(c *gin.Context) {
-		var json EndpointCRUD
-		var document EndpointDoc
+		var json endpoint.EndpointCRUD
+		var document endpoint.EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, user := decodeAuthUserOrFail(json.Token)
 			fmt.Println("Authed")
@@ -639,8 +520,8 @@ func main() {
 
 	})
 	r.POST("/get-endpoint", func(c *gin.Context) {
-		var json EndpointCRUD
-		var document EndpointDoc
+		var json endpoint.EndpointCRUD
+		var document endpoint.EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, _ := decodeAuthUserOrFail(json.Token)
 			if authed == true {
@@ -655,7 +536,7 @@ func main() {
 		}
 	})
 	r.POST("/delete-endpoint", func(c *gin.Context) {
-		var json EndpointCRUD
+		var json endpoint.EndpointCRUD
 		if c.BindJSON(&json) == nil {
 			authed, _ := decodeAuthUserOrFail(json.Token)
 			if authed == true {
@@ -672,9 +553,9 @@ func main() {
 		}
 	})
 	r.POST("/update-endpoint", func(c *gin.Context) {
-		var json EndpointCRUD
-		var document EndpointDoc
-		var db_document EndpointDoc
+		var json endpoint.EndpointCRUD
+		var document endpoint.EndpointDoc
+		var db_document endpoint.EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, _ := decodeAuthUserOrFail(json.Token)
 			if authed == true {
@@ -696,7 +577,7 @@ func main() {
 	})
 	r.POST("/insert", func(c *gin.Context) {
 		var json DataCRUD
-		var endpointDoc EndpointDoc
+		var endpointDoc endpoint.EndpointDoc
 		var err error
 		var clusterManager *gocb.ClusterManager
 		if c.BindJSON(&json) == nil {
@@ -738,7 +619,7 @@ func main() {
 	})
 	r.POST("/update", func(c *gin.Context) {
 		var json DataCRUD
-		var endpointDoc EndpointDoc
+		var endpointDoc endpoint.EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, _ := decodeAuthUserOrFail(json.Token)
 			if authed == true {
@@ -764,7 +645,7 @@ func main() {
 	})
 	r.POST("/delete", func(c *gin.Context) {
 		var json DataCRUD
-		var endpointDoc EndpointDoc
+		var endpointDoc endpoint.EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, _ := decodeAuthUserOrFail(json.Token)
 			if authed == true {
@@ -790,7 +671,7 @@ func main() {
 	})
 	r.POST("/get", func(c *gin.Context) {
 		var json DataCRUD
-		var endpointDoc EndpointDoc
+		var endpointDoc endpoint.EndpointDoc
 		var data_blob interface{}
 		if c.BindJSON(&json) == nil {
 			authed, _ := decodeAuthUserOrFail(json.Token)
