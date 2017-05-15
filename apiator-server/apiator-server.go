@@ -21,7 +21,7 @@ import "./endpoint"
 var (
 	jwtSecret           = []byte("KHOzH8DJRHIPfC9Mq8yH")
 	conf = config.GetConfig()
-	operationsToApply = make(chan QueuedOperation)
+	operationsToApply = make([]QueuedOperation,5)
 	syncRedis = make(chan int)
 	syncSolr = make(chan int)
 	quitSync = make(chan int)
@@ -30,54 +30,54 @@ var (
 
 func redisOperationFail(operation string){
 	fmt.Printf("Redis operation failed: %s \n",operation)
-	operationsToApply <- QueuedOperation{DbType:1,Operation:operation}
+	operationsToApply = append(operationsToApply,QueuedOperation{DbType:1,Operation:operation})
 	// fmt.Printf("Redis operation failed: %s \n",operation)
-}
-func issueRedisSync(){
-	syncRedis <- 1
 }
 
 //calling this function with go routine will sync the dbs
 // func syncdbs(syncRedis,syncSolr, quit chan int){
 func syncdbs(){
-	for {
-		select {
-		case _ = <-quitSync:
-			fmt.Println("Stop waiting to sync")
-			return
-			
-		case _ = <-syncRedis:
-			fmt.Println("Redis Sync Issued")
-		client := redis.NewClient(&redis.Options{
-		Addr:     conf.RedisServerAddr,
-		Password: conf.RedisServerPassword,
-			DB:       0, // use default DB
-		})
-			for op := range operationsToApply{
-				switch  op.DbType {
-				case 0://couchbase
-					fmt.Println("Don't handle couchbase queued ops'")
-					operationsToApply <- op
+	for _, op := range operationsToApply{
+		switch  op.DbType {
+		case 0://couchbase
+			fmt.Println("Don't handle couchbase queued ops'")
+			// switch op.functtype:
+			//do stuff depending on functtype passing in necessary args
 
-				case 1://redis
-					fmt.Println("Run failed redis command: %s",op.Operation)
-					fmt.Println(op.Operation)
-					err := client.Eval(op.Operation,[]string{})
-					//TODO: putting back here is dangerous if too many "bad" redis commands stack up
-					if err != nil{//put it back
-						operationsToApply <- op
-					}
-					
-				case 2://solr
-					fmt.Println("Don't handle solr queued ops'")
-					operationsToApply<- op
-				default:
-				}
+		case 1://redis
+			client := redis.NewClient(&redis.Options{
+				Addr:     conf.RedisServerAddr,
+				Password: conf.RedisServerPassword,
+				DB:       0, // use default DB
+			})
+			fmt.Println("Run failed redis command: %s",op.Operation)
+			fmt.Println(op.Operation)
+			err := client.Eval(op.Operation,[]string{})
+			//TODO: putting back here is dangerous if too many "bad" redis commands stack up
+			if err == nil{//if successful then remove that slice part
+				operationsToApply = append(operationsToApply[:0], operationsToApply[1:]...)
 			}
 			
+		case 2://solr
+			fmt.Println("Don't handle solr queued ops'")
+			
+		default:
 		}
 	}
+}
 
+func logStoredOps(){
+	for _,op := range operationsToApply{
+		switch  op.DbType {
+		case 0://couchbase
+			fmt.Println("Don't handle couchbase queued ops'")
+		case 1://redis
+			fmt.Println("Run failed redis command: %s",op.Operation)
+		case 2://solr
+			fmt.Println("Don't handle solr queued ops'")
+		default:
+		}
+	}
 }
 
 //QueuedRedisOperation represents a redis operation to be performed
@@ -89,7 +89,7 @@ type QueuedRedisOperation struct {
 
 //QueuedOperation represents a queued instruction to preform 
 type QueuedOperation struct {
-		//TODO: make Databasetype be an enum type rather than int
+	//TODO: make Databasetype be an enum type rather than int
 	//currently 0 -> couchbase
 	//          1 -> redis
 	//          2 -> solr
@@ -178,13 +178,13 @@ func storeUserTokenRedis(username, jwt string) error {
 	err := client.SAdd("usernames", username).Err()
 	if err  != nil{
 		q1 := fmt.Sprintf("sadd usernames %s",username)
-		go redisOperationFail(q1)
+		redisOperationFail(q1)
 	}
 	// client.SAdd("jwts",jwt)
 	err = client.Set(fmt.Sprintf("token_%s", username), jwt, 0).Err()
 	if err != nil{
 		q2 := fmt.Sprintf("set token_%s %s", username,jwt)
-		go redisOperationFail(q2)
+		redisOperationFail(q2)
 	}
 	
 	
@@ -278,38 +278,48 @@ func main() {
 			"redis-message": pong,
 		})
 	})
-	r.GET("/redis/set-user-token/:username", func(c *gin.Context) {
+	
+	r.POST("/redis/set-user-token/:username", func(c *gin.Context) {
 		var username = c.Param("username")
 		var jwt, jwterr = createJwtToken(username)
 		if jwterr != nil {
-			c.JSON(400, gin.H{
+			c.JSON(500, gin.H{
 				"jwt-create-err": jwterr,
 				"jwt":            jwt})
 		}
 
 		var err = storeUserTokenRedis(username, jwt)
+		//TODO: figure out why returning 400/500 here causes postman to Syntax error
+		// if err != nil {
+		// 	c.JSON(500, gin.H{
+		// 		"store-error": err,})
+		// }
 		c.JSON(200, gin.H{
 			"redis-err": err,
 			"user":      username,
 			"jwt":       jwt,
 		})
 	})
+	r.GET("log-stored-ops", func(c *gin.Context) {
+		logStoredOps()
+		
+	})
 	r.GET("/redis/reset-user-token/:username", func(c *gin.Context) {
 		var username = c.Param("username")
 		var err = resetUserTokenRedis(username)
 		if err != nil {
 			c.JSON(400, gin.H{
-			"redis-err": err,
-			// "redis-reset-err": reseterr,
-			"user":      username,
-		})
+				"redis-err": err,
+				// "redis-reset-err": reseterr,
+				"user":      username,
+			})
 		}else{
 			c.JSON(200, gin.H{
-			"redis-err": err,
-			// "redis-reset-err": reseterr,
-			"user":      username,
-			"jwt":       "reset: value nil",
-		})
+				"redis-err": err,
+				// "redis-reset-err": reseterr,
+				"user":      username,
+				"jwt":       "reset: value nil",
+			})
 		}
 		
 	})
@@ -320,14 +330,14 @@ func main() {
 		var token, err = retrieveUserTokenRedis(username)
 		if err != nil{
 			c.JSON(200, gin.H{
-			"redis-err":  "could not find token for username",
-			"user-token": token,
-		})
+				"redis-err":  "could not find token for username",
+				"user-token": token,
+			})
 		}else {
 			c.JSON(200, gin.H{
-			"redis-err":  err,
-			"user-token": token,
-		})
+				"redis-err":  err,
+				"user-token": token,
+			})
 		}
 		
 	})
@@ -349,7 +359,7 @@ func main() {
 	
 	//issues attempt to sync redis
 	r.GET("/redis/sync", func(c *gin.Context) {
-		go issueRedisSync()
+		syncdbs()
 		c.JSON(200, gin.H{
 			"solr-message": "Start attempt to sync manually",
 		})
@@ -377,8 +387,8 @@ func main() {
 			})
 		}else{
 			c.JSON(200, gin.H{
-			"users": results,
-		})
+				"users": results,
+			})
 		}
 	})
 	r.GET("/solr/getuser/:username", func(c *gin.Context) {
@@ -391,8 +401,8 @@ func main() {
 			})
 		}else{
 			c.JSON(200, gin.H{
-			"users": results,
-		})
+				"users": results,
+			})
 		}
 	})
 	r.POST("/solr/insertuser", func(c *gin.Context) {
@@ -406,8 +416,8 @@ func main() {
 			})
 		}else{
 			c.JSON(200, gin.H{
-			"success: result": result,
-		})
+				"success: result": result,
+			})
 		}
 	})
 	r.POST("/create-user" , func(c *gin.Context) {
@@ -436,7 +446,7 @@ func main() {
 		_,err = dbsolr.SolrInsertUser(&form)
 		if err != nil{
 			c.JSON(402, gin.H{
-				"message": "request failed, unable to insert to couchbase bucket",
+				"message": "request failed, unable to insert user to solr",
 				"err": err,
 			})
 		}
@@ -475,9 +485,9 @@ func main() {
 					token, _ := createJwtToken(username)
 					//TODO: Handle the case where REDIS is down when we try to do this
 					//append the failed value to a list rather than just fail
-					 _ = storeUserTokenRedis(username, token)
+					_ = storeUserTokenRedis(username, token)
 					// if err != nil{
-						
+					
 					// }
 
 					c.JSON(200, gin.H{
@@ -520,11 +530,11 @@ func main() {
 				err := bucketInsert(bucket,document,json.ID)
 				if err != nil{
 					c.JSON(200, gin.H{
-					"message": "document inserted",
+						"message": "document inserted",
 					})
 				}else{
 					c.JSON(400, gin.H{
-					"message": "document insert failed",
+						"message": "document insert failed",
 					})
 				}
 				
