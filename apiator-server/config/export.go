@@ -1,13 +1,27 @@
 package config
 
 const (
-	couchbaseServerAddr = "localhost:8091"
-	solrServerAddr = "127.0.0.1:8983"
-	redisServerAddr     = "localhost:6379"
-	redisServerPassword = ""
-	solrServerHost = "localhost"
+	couchbaseServerAddr = "137.112.104.106:8091"
+	solrServerAddr = "http://apiator-2.csse.rose-hulman.edu:8983"
+	redisServerAddr     = "apiator-3.csse.rose-hulman.edu:6379"
+	redisServerPassword = "AK1lTOuHyUNT5sN4JHP7"
+	solrServerHost = "http://apiator-2.csse.rose-hulman.edu"
 	solrServerPort = 8983
 	solrCoreName = "gettingstarted"
+)
+
+const (
+	localCouchbaseServerAddr = "localhost:8091"
+	localSolrServerAddr = "127.0.0.1:8983"
+	localRedisServerAddr     = "localhost:6379"
+	localRedisServerPassword = ""
+	localSolrServerHost = "localhost"
+	localSolrServerPort = 8983
+	localSolrCoreName = "gettingstarted"
+)
+
+const (
+	isProduction = true
 )
 
 type Config struct {
@@ -21,13 +35,23 @@ type Config struct {
 
 
 func GetConfig()(Config){
-	return Config{
-		CouchbaseServerAddr:couchbaseServerAddr,
-		SolrServerHost:solrServerHost,
-		SolrServerPort:solrServerPort,
-		SolrCoreName:  solrCoreName,
-		RedisServerAddr:redisServerAddr,
-		RedisServerPassword:redisServerPassword,
+	if (isProduction){
+		return Config{
+			CouchbaseServerAddr:couchbaseServerAddr,
+			SolrServerHost:solrServerHost,
+			SolrServerPort:solrServerPort,
+			SolrCoreName:  solrCoreName,
+			RedisServerAddr:redisServerAddr,
+			RedisServerPassword:redisServerPassword,
 		}
+	}else{ return Config{
+		CouchbaseServerAddr:localCouchbaseServerAddr,
+		SolrServerHost:localSolrServerHost,
+		SolrServerPort:localSolrServerPort,
+		SolrCoreName:  localSolrCoreName,
+		RedisServerAddr:localRedisServerAddr,
+		RedisServerPassword:localRedisServerPassword,}
+	}
+	
 }
 
