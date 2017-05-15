@@ -222,6 +222,17 @@ func retrieveUserTokenRedis(username string) (string, error) {
 	val, err := client.Get(fmt.Sprintf("token_%s", username)).Result()
 	return val, err
 }
+//clear the SET of member names
+func resetAllUserTokensRedis() (int64, error) {
+	client := redis.NewClient(&redis.Options{
+		Addr:     conf.RedisServerAddr,
+		Password: conf.RedisServerPassword,
+		DB:       0, // use default DB
+	})
+
+	val,err := client.Del("usernames").Result()
+	return val,err
+}
 
 
 func bucketInsert(bucket *gocb.Bucket,document interface{},id string)(error){
@@ -327,6 +338,15 @@ func main() {
 			"user-tokens": tokens,
 		})
 	})
+	r.POST("/redis/reset-all-authed-users", func(c *gin.Context) {
+		var val,err = resetAllUserTokensRedis()
+
+		c.JSON(200, gin.H{
+			"redis-err":     err,
+			"redis-message": val,
+		})
+	})
+	
 	//issues attempt to sync redis
 	r.GET("/redis/sync", func(c *gin.Context) {
 		go issueRedisSync()
