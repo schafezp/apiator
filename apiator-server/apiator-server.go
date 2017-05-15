@@ -493,18 +493,18 @@ func main() {
 			}
 		}
 	})
-	r.GET("/authed-ping", func(c *gin.Context) {
-		authed, _ := decodeAuthUserOrFail("foo")
-		if authed == true {
-			c.JSON(200, gin.H{
-				"message": "pong",
-			})
-		} else {
-			c.JSON(401, gin.H{
-				"message": "unauthorized user!",
-			})
-		}
-	})
+	// r.GET("/authed-ping", func(c *gin.Context) {
+	// 	authed, _ := decodeAuthUserOrFail("foo")
+	// 	if authed == true {
+	// 		c.JSON(200, gin.H{
+	// 			"message": "pong",
+	// 		})
+	// 	} else {
+	// 		c.JSON(401, gin.H{
+	// 			"message": "unauthorized user!",
+	// 		})
+	// 	}
+	// })
 	r.POST("/create-endpoint", func(c *gin.Context) {
 		var json endpoint.EndpointCRUD
 		var document endpoint.EndpointDoc
