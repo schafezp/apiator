@@ -383,7 +383,7 @@ func main() {
 
 		if err != nil{
 			c.JSON(400, gin.H{
-				"error retrieve users": results,
+				"error retrieve users": err,
 			})
 		}else{
 			c.JSON(200, gin.H{
