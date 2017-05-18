@@ -446,12 +446,30 @@ func main() {
 							fmt.Println("statistics for endpoint: ", epid)
 							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "domain_id":"%s"}`, 
 								epid, connection.auth.token, domain)
-							resp, err := postJSON("/get-statistics", jsonS)
+							where := connection.host + "/get-statistics"
+							resp, err := postJSON(where, jsonS)
 							if (err != nil) {
 								fmt.Println("ERR:", err)
 							} else {
 								fmt.Println("RESP:", resp)
 							}
+						}
+						return nil
+					},
+				},
+				{
+					Name: "list",
+					ArgsUsage: "",
+					Usage: "Returns a list of all endpoints you own across all domains",
+					Action: func(c *cli.Context) error {
+						jsonS := fmt.Sprintf(`{"token":"%s"}`, 
+							connection.auth.token)
+						where := connection.host + "/get-endpoints"
+						resp, err := postJSON(where, jsonS)
+						if (err != nil) {
+							fmt.Println("ERR:", err)
+						} else {
+							fmt.Println("RESP:", resp)
 						}
 						return nil
 					},
