@@ -22,10 +22,6 @@ var (
 	jwtSecret           = []byte("KHOzH8DJRHIPfC9Mq8yH")
 	conf = config.GetConfig()
 	operationsToApply = make([]QueuedOperation,5)
-	syncRedis = make(chan int)
-	syncSolr = make(chan int)
-	quitSync = make(chan int)
-	
 )
 
 func redisOperationFail(operation string){
