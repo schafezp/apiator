@@ -317,6 +317,10 @@ func main() {
 						fmt.Println("ERR:", err)
 					} else {
 						fmt.Println("RESP:", resp)
+						if (resp.StatusCode == 200) {
+							fmt.Println("Password Changed! (You have been disconnected, please reconnect)")
+							connection = ConnectionData{}
+						}
 					}
 				}
 				return nil
