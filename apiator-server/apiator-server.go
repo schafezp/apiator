@@ -992,6 +992,14 @@ func main() {
 						return
 					}
 					_,err = dbsolr.SolrInsertEndpoint(json)
+					
+					
+					//in this case, store as queued operation
+					if err != nil{
+						//make sure this mutates operationsToApply
+						solrOperationFail(json)
+					}
+					
 					c.JSON(200, gin.H{
 						"message": "document inserted",
 					})
