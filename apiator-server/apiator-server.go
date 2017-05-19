@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/go-redis/redis"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/couchbase/gocb.v1"
 	"gopkg.in/gin-gonic/gin.v1"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -19,14 +19,15 @@ import "./dbsolr"
 import "./config"
 import "./structs"
 import "./sync"
+import "./stats"
 
 // func handleCouchbaseError()
 var (
 	jwtSecret = []byte("KHOzH8DJRHIPfC9Mq8yH")
 	conf      = config.GetConfig()
 	//reasonable initial length? currently set to 5
-	operationsToApply = make([]sync.QueuedOperation, 5)
-	cluster,connectionerror = gocb.Connect(conf.CouchbaseServerAddr)
+	operationsToApply        = make([]sync.QueuedOperation, 5)
+	cluster, connectionerror = gocb.Connect(conf.CouchbaseServerAddr)
 )
 
 //TODO: consider best way to move this into sync
@@ -35,8 +36,6 @@ func redisOperationFail(operation string) {
 	operationsToApply = append(operationsToApply, sync.QueuedOperation{DbType: 1, Operation: operation})
 	// fmt.Printf("Redis operation failed: %s \n",operation)
 }
-
-
 
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
@@ -259,16 +258,18 @@ func createUserEndpoints(username, domain, endpointArg string) error {
 			if err != nil {
 				return err
 			}
+			err = stats.AddUserStatistic(username, domain, endpointArg, 7)
+			if err != nil {
+				return err
+			}
 			return nil
 		}
 	}
+	err = stats.AddUserStatistic(username, domain, endpointArg, 7)
+	if err != nil {
+		return err
+	}
 	return nil
-}
-
-func removeEndpointFromStatistics(bucket *gocb.Bucket, bucket_id string) error {
-	var err error
-	_, err = bucket.Remove(bucket_id, 0)
-	return err
 }
 
 func updateUserEndpoints(username string, domain string, endpointArg string, permissions int) error {
@@ -299,6 +300,14 @@ func updateUserEndpoints(username string, domain string, endpointArg string, per
 					if err != nil {
 						return err
 					}
+					err = stats.DeleteUserStatistic(username, domain, endpointArg)
+					if err != nil {
+						return err
+					}
+					err = stats.AddUserStatistic(username, domain, endpointArg, permissions)
+					if err != nil {
+						return err
+					}
 					return nil
 				}
 			}
@@ -310,6 +319,14 @@ func updateUserEndpoints(username string, domain string, endpointArg string, per
 			userDoc.Domains[index].Endpoints = domain_doc.Endpoints
 			_, err = bucket.Replace(username, &userDoc,
 				0, 0)
+			if err != nil {
+				return err
+			}
+			err = stats.DeleteUserStatistic(username, domain, endpointArg)
+			if err != nil {
+				return err
+			}
+			err = stats.AddUserStatistic(username, domain, endpointArg, permissions)
 			if err != nil {
 				return err
 			}
@@ -329,6 +346,14 @@ func updateUserEndpoints(username string, domain string, endpointArg string, per
 	userDoc.Domains = domains
 	_, err = bucket.Replace(username, &userDoc,
 		0, 0)
+	if err != nil {
+		return err
+	}
+	err = stats.DeleteUserStatistic(username, domain, endpointArg)
+	if err != nil {
+		return err
+	}
+	err = stats.AddUserStatistic(username, domain, endpointArg, permissions)
 	if err != nil {
 		return err
 	}
@@ -359,6 +384,10 @@ func deleteUserEndpoints(username string, domain string, endpointArg string) err
 					if err != nil {
 						return err
 					}
+					err = stats.DeleteUserStatistic(username, domain, endpointArg)
+					if err != nil {
+						return err
+					}
 					return nil
 				}
 			}
@@ -381,19 +410,17 @@ func userBucketInsert(bucket *gocb.Bucket, document structs.Login) error {
 	return err
 }
 
-
 //This function
 func storeFailedOperation() {
 
 }
 
-
 func main() {
 	cluster, err := gocb.Connect(conf.CouchbaseServerAddr)
-	if err != nil{
+	if err != nil {
 		log.Panic(err)
 	}
-	
+
 	r := gin.Default()
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -949,6 +976,8 @@ func main() {
 						"message": "unable to open endpoints bucket!",
 						"error":   err.Error(),
 					})
+					AddMissCount(json.DomainID, json.ID)
+					UpdateTimeStatistic(json.DomainID, json.ID)
 					return
 				}
 				bucket_id := json.DomainID + json.ID
@@ -958,6 +987,8 @@ func main() {
 						"message": "unable to fetch endpoint_doc!",
 						"error":   err.Error(),
 					})
+					AddMissCount(json.DomainID, json.ID)
+					UpdateTimeStatistic(json.DomainID, json.ID)
 					return
 				}
 				if valid, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 2); valid {
@@ -974,6 +1005,8 @@ func main() {
 								"message": "unable to open bucket!",
 								"error":   err.Error(),
 							})
+							AddMissCount(json.DomainID, json.ID)
+							UpdateTimeStatistic(json.DomainID, json.ID)
 							return
 						}
 					}
@@ -985,6 +1018,8 @@ func main() {
 							"message": "unable to open bucket!",
 							"error":   err.Error(),
 						})
+						AddMissCount(json.DomainID, json.ID)
+						UpdateTimeStatistic(json.DomainID, json.ID)
 						return
 					}
 					_, err = bucket.Insert(json.DocID, json.Doc, 0)
@@ -993,8 +1028,12 @@ func main() {
 							"message": "unable to insert document!",
 							"error":   err.Error(),
 						})
+						AddMissCount(json.DomainID, json.ID)
+						UpdateTimeStatistic(json.DomainID, json.ID)
 						return
 					}
+					AddHitCount(json.DomainID, json.ID)
+					UpdateTimeStatistic(json.DomainID, json.ID)
 					c.JSON(200, gin.H{
 						"message": "document inserted",
 					})
@@ -1026,6 +1065,8 @@ func main() {
 						"message": "unable to open endpoints bucket!",
 						"error":   err.Error(),
 					})
+					AddMissCount(json.DomainID, json.ID)
+					UpdateTimeStatistic(json.DomainID, json.ID)
 					return
 				}
 				bucket_id := json.DomainID + json.ID
@@ -1035,6 +1076,8 @@ func main() {
 						"message": "unable to fetch endpoint_doc!",
 						"error":   err.Error(),
 					})
+					AddMissCount(json.DomainID, json.ID)
+					UpdateTimeStatistic(json.DomainID, json.ID)
 					return
 				}
 				has_write_permission, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 2)
@@ -1049,6 +1092,8 @@ func main() {
 							"message": "unable to open bucket!",
 							"error":   err.Error(),
 						})
+						AddMissCount(json.DomainID, json.ID)
+						UpdateTimeStatistic(json.DomainID, json.ID)
 						return
 					}
 					_, err = bucket.Replace(json.DocID, json.Doc, 0, 0)
@@ -1057,8 +1102,15 @@ func main() {
 							"message": "unable to update document!",
 							"error":   err.Error(),
 						})
+						AddMissCount(json.DomainID, json.ID)
+						UpdateTimeStatistic(json.DomainID, json.ID)
 						return
 					}
+					AddHitCount(json.DomainID, json.ID)
+					UpdateTimeStatistic(json.DomainID, json.ID)
+					c.JSON(200, gin.H{
+						"message": "document updated",
+					})
 				} else {
 					c.JSON(401, gin.H{
 						"message": "unauthorized user!",
@@ -1088,6 +1140,8 @@ func main() {
 						"message": "unable to open endpoints bucket!",
 						"error":   err.Error(),
 					})
+					AddMissCount(json.DomainID, json.ID)
+					UpdateTimeStatistic(json.DomainID, json.ID)
 					return
 				}
 				_, err = bucket.Get(bucket_id, &endpoint_doc)
@@ -1096,6 +1150,8 @@ func main() {
 						"message": "unable to fetch endpoint_doc!",
 						"error":   err.Error(),
 					})
+					AddMissCount(json.DomainID, json.ID)
+					UpdateTimeStatistic(json.DomainID, json.ID)
 					return
 				}
 				has_del_permission, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 4)
@@ -1109,6 +1165,8 @@ func main() {
 							"message": "unable to open bucket!",
 							"error":   err.Error(),
 						})
+						AddMissCount(json.DomainID, json.ID)
+						UpdateTimeStatistic(json.DomainID, json.ID)
 						return
 					}
 					_, err = bucket.Remove(json.DocID, 0)
@@ -1117,8 +1175,15 @@ func main() {
 							"message": "unable to remove document!",
 							"error":   err.Error(),
 						})
+						AddMissCount(json.DomainID, json.ID)
+						UpdateTimeStatistic(json.DomainID, json.ID)
 						return
 					}
+					AddHitCount(json.DomainID, json.ID)
+					UpdateTimeStatistic(json.DomainID, json.ID)
+					c.JSON(200, gin.H{
+						"message": "delete successful",
+					})
 				} else {
 					c.JSON(401, gin.H{
 						"message": "unauthorized user!",
@@ -1148,6 +1213,8 @@ func main() {
 						"message": "unable to open endpoints bucket!",
 						"error":   err.Error(),
 					})
+					AddMissCount(json.DomainID, json.ID)
+					UpdateTimeStatistic(json.DomainID, json.ID)
 					return
 				}
 				bucket_id := json.DomainID + json.ID
@@ -1157,6 +1224,8 @@ func main() {
 						"message": "unable to fetch endpoint_doc!",
 						"error":   err.Error(),
 					})
+					AddMissCount(json.DomainID, json.ID)
+					UpdateTimeStatistic(json.DomainID, json.ID)
 					return
 				}
 				if valid, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 1); valid {
@@ -1169,6 +1238,8 @@ func main() {
 							"message": "unable to open bucket!",
 							"error":   err.Error(),
 						})
+						AddMissCount(json.DomainID, json.ID)
+						UpdateTimeStatistic(json.DomainID, json.ID)
 						return
 					}
 					bucket, err = cluster.OpenBucket(endpoint_bucket_name, "")
@@ -1177,6 +1248,8 @@ func main() {
 							"message": "unable to open bucket!",
 							"error":   err.Error(),
 						})
+						AddMissCount(json.DomainID, json.ID)
+						UpdateTimeStatistic(json.DomainID, json.ID)
 						return
 					}
 					_, err = bucket.Get(json.DocID, &data_blob)
@@ -1185,8 +1258,12 @@ func main() {
 							"message": "unable to get document!",
 							"error":   err.Error(),
 						})
+						AddMissCount(json.DomainID, json.ID)
+						UpdateTimeStatistic(json.DomainID, json.ID)
 						return
 					}
+					AddHitCount(json.DomainID, json.ID)
+					UpdateTimeStatistic(json.DomainID, json.ID)
 					c.JSON(200, data_blob)
 				} else {
 					c.JSON(401, gin.H{
