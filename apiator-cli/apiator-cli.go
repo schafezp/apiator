@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 	// "reflect"
-	"os"
 	"bufio"
-	"strings"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	//"encoding/json"
 	"github.com/urfave/cli"
 )
@@ -31,7 +31,7 @@ var authFlags []bool
 func postJSON(where string, jsonString string) (*http.Response, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("POST", where, strings.NewReader(jsonString))
-	if (err != nil) {
+	if err != nil {
 		return nil, err
 	}
 	req.Header.Add("Content-Type", "application/json")
@@ -48,7 +48,7 @@ func checkConenction() bool {
 func main() {
 	domain = "" // so it's not null
 	authFlags := make([]bool, 3)
-	authFlags[0] = false; // so this stupid compiler will think we use this
+	authFlags[0] = false // so this stupid compiler will think we use this
 	activeREPL := false
 	reader := bufio.NewReader(os.Stdin)
 	app := cli.NewApp()
@@ -57,31 +57,31 @@ func main() {
 	app.Flags = []cli.Flag{
 		// tells us to use repl or not. set automatically if connect or repl is called
 		cli.BoolFlag{
-			Name: "use-repl",
-			Usage: "If this flag is set to true, the cli will run the REPL after executing the command",
+			Name:        "use-repl",
+			Usage:       "If this flag is set to true, the cli will run the REPL after executing the command",
 			Destination: &useREPL,
 		},
 	}
 	app.Commands = []cli.Command{
 		// command to connect to the db
 		{
-			Name: "connect",
-			Aliases: []string{"c"},
-			Usage: "Connect to a apiator server",
+			Name:      "connect",
+			Aliases:   []string{"c"},
+			Usage:     "Connect to a apiator server",
 			ArgsUsage: "[host]",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name: "user, u",
+					Name:  "user, u",
 					Usage: "Username to log-in with",
 				},
 				cli.StringFlag{
-					Name: "pass, p",
+					Name:  "pass, p",
 					Usage: "Password to log-in with",
 				},
 			},
 			Action: func(c *cli.Context) error {
 				if c.NArg() != 1 {
-					fmt.Printf("Expected a host argument.");
+					fmt.Printf("Expected a host argument.")
 				} else {
 					// print info for debugging
 					host := c.Args().First()
@@ -91,10 +91,10 @@ func main() {
 					fmt.Println("user: ", user)
 					// fmt.Println("pass: ", pass)
 
-					resp, err := http.PostForm(host + "/auth",
+					resp, err := http.PostForm(host+"/auth",
 						url.Values{"username": {user}, "password": {pass}})
 
-					if (err != nil) {
+					if err != nil {
 						fmt.Println("ERR: ", err)
 						// connection stays nil
 					} else {
@@ -103,11 +103,11 @@ func main() {
 						// fmt.Println("RESP: ", reflect.TypeOf(resp.Body))
 						// fmt.Println("RESP: ", resp.Body)
 						// fmt.Println("RESP: ", resp.StatusCode)
-						if (resp.StatusCode == 200) {
-							
+						if resp.StatusCode == 200 {
+
 							// accepted
 							jsonbytes, err := ioutil.ReadAll(resp.Body)
-							if (err != nil) {
+							if err != nil {
 								fmt.Println("IOERR:", err)
 								return nil
 							} else {
@@ -117,7 +117,7 @@ func main() {
 								// 	fmt.Println("JSON Error: ", jerr)
 								// }
 								token := string(jsonbytes)
-								token = token[10:len(token) - 3]
+								token = token[10 : len(token)-3]
 								connection = ConnectionData{host, AuthResponse{token}}
 								fmt.Println("Connected to host successfully: ", connection.host)
 								fmt.Println("Session Token: ", token)
@@ -129,10 +129,10 @@ func main() {
 						}
 					}
 				}
-				
+
 				// always use repl once we connect
 				connected := checkConenction()
-				if (!activeREPL && connected) {
+				if !activeREPL && connected {
 					c.App.Run([]string{os.Args[0], "repl"})
 				}
 				return nil
@@ -140,12 +140,12 @@ func main() {
 		},
 		// start the repl
 		{
-			Name: "repl",
+			Name:  "repl",
 			Usage: "Start the REPL",
 			Action: func(c *cli.Context) error {
 				// make sure we can tell that a repl is active, and we don't start another one
 				if activeREPL {
-					fmt.Println("Already inside a repl.");
+					fmt.Println("Already inside a repl.")
 					return nil
 				}
 				activeREPL = true
@@ -153,37 +153,37 @@ func main() {
 				// REPL
 				fmt.Println("APIator REPL - Type 'exit' when done")
 				cont := true
-				for (cont) {
-					fmt.Print(">>> ");
-					text, _ := reader.ReadString('\n');
-					text = strings.TrimSpace(text);
-					replargs := strings.Split(text, " ");
-					cont = (text != "exit");
+				for cont {
+					fmt.Print(">>> ")
+					text, _ := reader.ReadString('\n')
+					text = strings.TrimSpace(text)
+					replargs := strings.Split(text, " ")
+					cont = (text != "exit")
 					if cont {
 						c.App.Run(append([]string{os.Args[0]}, replargs...))
 					}
 				}
 
 				// done
-				activeREPL = false;
+				activeREPL = false
 				return nil
 			},
 		},
 		// GET
 		{
-			Name: "get",
+			Name:  "get",
 			Usage: "Performs a GET request at the specified location",
 			Flags: []cli.Flag{
 				cli.BoolFlag{
-					Name: "not-relative",
+					Name:  "not-relative",
 					Usage: "Don't treat the location as a relative path",
 				},
 			},
 			Action: func(c *cli.Context) error {
 				where := c.Args().First()
-				if (!c.Bool("not-relative")) {
+				if !c.Bool("not-relative") {
 					connected := checkConenction()
-					if (!connected) {
+					if !connected {
 						fmt.Println("ERR: Relative path requires connection")
 						return nil
 					} else {
@@ -193,7 +193,7 @@ func main() {
 				fmt.Println("GET: ", where)
 				resp, err := http.Get(where)
 
-				if (err != nil) {
+				if err != nil {
 					fmt.Println("ERR: ", err)
 				} else {
 					fmt.Println("RESP: ", resp)
@@ -204,12 +204,12 @@ func main() {
 		},
 		// set domain
 		{
-			Name: "set-domain",
+			Name:    "set-domain",
 			Aliases: []string{"domain"},
-			Usage: "Sets the domain for sfuture operations",
+			Usage:   "Sets the domain for sfuture operations",
 			Action: func(c *cli.Context) error {
 				if c.NArg() != 1 {
-					fmt.Println("Expected one argument.");
+					fmt.Println("Expected one argument.")
 					return nil
 				}
 				domain = c.Args().First()
@@ -218,9 +218,9 @@ func main() {
 		},
 		// check domain
 		{
-			Name: "check-domain",
+			Name:    "check-domain",
 			Aliases: []string{"domain?", "chk-domain"},
-			Usage: "Prints value of current domain",
+			Usage:   "Prints value of current domain",
 			Action: func(c *cli.Context) error {
 				fmt.Println("Current Domain: " + domain)
 				return nil
@@ -228,24 +228,24 @@ func main() {
 		},
 		// Create a new domain
 		{
-			Name: "create-domain",
+			Name:  "create-domain",
 			Usage: "Create a new domain",
 			Action: func(c *cli.Context) error {
 				if c.NArg() != 1 {
-					fmt.Println("Expected one argument.");
+					fmt.Println("Expected one argument.")
 					return nil
 				}
 				newdomain := c.Args().First()
-				jsonS := fmt.Sprintf(`{"token":"%s", "domain_id":"%s"}`, 
-					connection.auth.token, c.Args().First())
+				jsonS := fmt.Sprintf(`{"token":"%s", "domain_id":"%s"}`,
+					connection.auth.token, domain)
 				where := connection.host + "/create-domain"
-				fmt.Println(jsonS)
+
 				resp, err := postJSON(where, jsonS)
-				if (err != nil) {
+				if err != nil {
 					fmt.Println("ERR:", err)
 				} else {
 					fmt.Println("RESP:", resp)
-					if (resp.StatusCode == 200) {
+					if resp.StatusCode == 200 {
 						domain = newdomain
 					}
 				}
@@ -255,30 +255,30 @@ func main() {
 
 		// endpoints (CRUD)
 		{
-			Name: "endpoint",
+			Name:    "endpoint",
 			Aliases: []string{"ep"},
-			Usage: "Perform a CRUD operation on an endpoint",
+			Usage:   "Perform a CRUD operation on an endpoint",
 			Action: func(c *cli.Context) error {
 				fmt.Println("Invalid command")
 				return nil
 			},
 			Subcommands: []cli.Command{
 				{
-					Name: "create",
-					Aliases: []string{"c"},
+					Name:      "create",
+					Aliases:   []string{"c"},
 					ArgsUsage: "[id]",
-					Usage: "Create an endpoint",
+					Usage:     "Create an endpoint",
 					Action: func(c *cli.Context) error {
 						if c.NArg() != 1 {
-							fmt.Println("Expected one argument.");
+							fmt.Println("Expected one argument.")
 						} else {
 							epid := c.Args().First()
 							fmt.Println("Create endpoint: ", epid)
-							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "domain_id":"%s", "document": {"request_types": ["Get"],"indexed": false}}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "domain_id":"%s", "document": {"request_types": ["Get"],"indexed": false}}`,
 								epid, connection.auth.token, domain)
 							where := connection.host + "/create-endpoint"
 							resp, err := postJSON(where, jsonS)
-							if (err != nil) {
+							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
 								fmt.Println("RESP:", resp)
@@ -288,21 +288,21 @@ func main() {
 					},
 				},
 				{
-					Name: "delete",
-					Aliases: []string{"del", "rm", "remove"},
+					Name:      "delete",
+					Aliases:   []string{"del", "rm", "remove"},
 					ArgsUsage: "[id]",
-					Usage: "Delete an endpoint",
+					Usage:     "Delete an endpoint",
 					Action: func(c *cli.Context) error {
 						if c.NArg() != 1 {
-							fmt.Println("Expected one argument.");
+							fmt.Println("Expected one argument.")
 						} else {
 							epid := c.Args().First()
 							fmt.Println("Delete endpoint: ", epid)
-							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "domain_id":"%s"}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "domain_id":"%s"}`,
 								epid, connection.auth.token, domain)
 							where := connection.host + "/delete-endpoint"
 							resp, err := postJSON(where, jsonS)
-							if (err != nil) {
+							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
 								fmt.Println("RESP:", resp)
@@ -312,22 +312,22 @@ func main() {
 					},
 				},
 				{
-					Name: "update",
-					Aliases: []string{"up"},
-					Usage: "Update an endpoint",
+					Name:      "update",
+					Aliases:   []string{"up"},
+					Usage:     "Update an endpoint",
 					ArgsUsage: "[endpoint] [doc]",
 					Action: func(c *cli.Context) error {
 						if c.NArg() < 2 {
-							fmt.Println("Expected two arguments: [endpoint] [doc]");
+							fmt.Println("Expected two arguments: [endpoint] [doc]")
 						} else {
 							epid := c.Args()[0]
 							doc := strings.Join(c.Args()[1:], " ")
 							fmt.Println("Update Endpoint: ", epid)
-							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "domain_id":"%s", "document":%s}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "domain_id":"%s", "document":%s}`,
 								epid, connection.auth.token, domain, doc)
 							where := connection.host + "/update-endpoint"
 							resp, err := postJSON(where, jsonS)
-							if (err != nil) {
+							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
 								fmt.Println("RESP:", resp)
@@ -337,21 +337,21 @@ func main() {
 					},
 				},
 				{
-					Name: "read",
-					Aliases: []string{"r", "get"},
-					Usage: "Read an endpoint",
+					Name:      "read",
+					Aliases:   []string{"r", "get"},
+					Usage:     "Read an endpoint",
 					ArgsUsage: "[id]",
 					Action: func(c *cli.Context) error {
 						if c.NArg() != 1 {
-							fmt.Println("Expected one argument.");
+							fmt.Println("Expected one argument.")
 						} else {
 							epid := c.Args().First()
 							fmt.Println("Read endpoint: ", epid)
-							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "domain_id":"%s"}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "domain_id":"%s"}`,
 								epid, connection.auth.token, domain)
 							where := connection.host + "/get-endpoint"
 							resp, err := postJSON(where, jsonS)
-							if (err != nil) {
+							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
 								fmt.Println("RESP:", resp)
@@ -361,50 +361,50 @@ func main() {
 					},
 				},
 				{
-					Name: "authorize",
-					Aliases: []string{"au", "auth"},
+					Name:      "authorize",
+					Aliases:   []string{"au", "auth"},
 					ArgsUsage: "[id] [user]",
-					Usage: "Authorize a user to access an endpoint with a certain permission level",
+					Usage:     "Authorize a user to access an endpoint with a certain permission level",
 					Flags: []cli.Flag{
 						cli.BoolFlag{
-							Name: "r",
-							Usage: "Enable read permissions",
+							Name:        "r",
+							Usage:       "Enable read permissions",
 							Destination: &authFlags[0],
 						},
 						cli.BoolFlag{
-							Name: "w",
-							Usage: "Enable write permissions",
+							Name:        "w",
+							Usage:       "Enable write permissions",
 							Destination: &authFlags[1],
 						},
 						cli.BoolFlag{
-							Name: "d",
-							Usage: "Enable delete permissions",
+							Name:        "d",
+							Usage:       "Enable delete permissions",
 							Destination: &authFlags[2],
 						},
 					},
 					Action: func(c *cli.Context) error {
 						if c.NArg() != 2 {
-							fmt.Println("Expected three arguments: [id] [user]");
+							fmt.Println("Expected three arguments: [id] [user]")
 						} else {
 							epid := c.Args()[0]
 							user := c.Args()[1]
 							perm := 0
-							if (authFlags[0]) {
-								perm = perm + 1;
+							if authFlags[0] {
+								perm = perm + 1
 							}
-							if (authFlags[1]) {
-								perm = perm + 2;
+							if authFlags[1] {
+								perm = perm + 2
 							}
-							if (authFlags[2]) {
-								perm = perm + 4;
+							if authFlags[2] {
+								perm = perm + 4
 							}
 							fmt.Println("Auth endpoint: ", epid, user, perm)
-							jsonS := fmt.Sprintf(`{"id":"%s", "username":"%s", "token":"%s", "domain_id":"%s", "permissions":%d}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "username":"%s", "token":"%s", "domain_id":"%s", "permissions":%d}`,
 								epid, user, connection.auth.token, domain, perm)
 							fmt.Println(jsonS)
 							where := connection.host + "/update-user-permissions"
 							resp, err := postJSON(where, jsonS)
-							if (err != nil) {
+							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
 								fmt.Println("RESP:", resp)
@@ -414,23 +414,23 @@ func main() {
 					},
 				},
 				{
-					Name: "revoke",
-					Aliases: []string{"deauth"},
+					Name:      "revoke",
+					Aliases:   []string{"deauth"},
 					ArgsUsage: "[endpoint-id] [user]",
-					Usage: "Revoke a user's access to an endpoint",
+					Usage:     "Revoke a user's access to an endpoint",
 					Action: func(c *cli.Context) error {
 						if c.NArg() != 2 {
-							fmt.Println("Expected three arguments: [endpoint-id] [user]");
+							fmt.Println("Expected three arguments: [endpoint-id] [user]")
 						} else {
 							epid := c.Args()[0]
 							user := c.Args()[1]
 							fmt.Println("Deuth endpoint: ", epid, user)
-							jsonS := fmt.Sprintf(`{"id":"%s", "username":"%s", "token":"%s", "domain_id":"%s"}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "username":"%s", "token":"%s", "domain_id":"%s"}`,
 								epid, user, connection.auth.token, domain)
 							fmt.Println(jsonS)
 							where := connection.host + "/delete-user-permissions"
 							resp, err := postJSON(where, jsonS)
-							if (err != nil) {
+							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
 								fmt.Println("RESP:", resp)
@@ -440,21 +440,21 @@ func main() {
 					},
 				},
 				{
-					Name: "metadata",
-					Aliases: []string{"meta", "info", "stats", "statistics"},
+					Name:      "metadata",
+					Aliases:   []string{"meta", "info", "stats", "statistics"},
 					ArgsUsage: "[id]",
-					Usage: "Returns metadata for an endpoint",
+					Usage:     "Returns metadata for an endpoint",
 					Action: func(c *cli.Context) error {
 						if c.NArg() != 1 {
-							fmt.Println("Expected one argument.");
+							fmt.Println("Expected one argument.")
 						} else {
 							epid := c.Args().First()
 							fmt.Println("statistics for endpoint: ", epid)
-							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "domain_id":"%s"}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "domain_id":"%s"}`,
 								epid, connection.auth.token, domain)
 							where := connection.host + "/get-statistics"
 							resp, err := postJSON(where, jsonS)
-							if (err != nil) {
+							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
 								fmt.Println("RESP:", resp)
@@ -464,15 +464,15 @@ func main() {
 					},
 				},
 				{
-					Name: "list",
+					Name:      "list",
 					ArgsUsage: "",
-					Usage: "Returns a list of all endpoints you own across all domains",
+					Usage:     "Returns a list of all endpoints you own across all domains",
 					Action: func(c *cli.Context) error {
-						jsonS := fmt.Sprintf(`{"token":"%s"}`, 
+						jsonS := fmt.Sprintf(`{"token":"%s"}`,
 							connection.auth.token)
 						where := connection.host + "/get-endpoints"
 						resp, err := postJSON(where, jsonS)
-						if (err != nil) {
+						if err != nil {
 							fmt.Println("ERR:", err)
 						} else {
 							fmt.Println("RESP:", resp)
@@ -484,33 +484,33 @@ func main() {
 		},
 		// put documents in endpoints
 		{
-			Name: "document",
+			Name:    "document",
 			Aliases: []string{"doc"},
-			Usage: "Modify documents in endpoints",
+			Usage:   "Modify documents in endpoints",
 			Action: func(c *cli.Context) error {
 				fmt.Println("Invalid command")
 				return nil
 			},
 			Subcommands: []cli.Command{
 				{
-					Name: "insert",
-					Aliases: []string{"i"},
-					Usage: "Insert document into an endpoint",
+					Name:      "insert",
+					Aliases:   []string{"i"},
+					Usage:     "Insert document into an endpoint",
 					ArgsUsage: "[endpoint] [docid] [doc]",
 					Action: func(c *cli.Context) error {
 						if c.NArg() < 3 {
-							fmt.Println("Expected three arguments: [endpoint] [docid] [doc]");
+							fmt.Println("Expected three arguments: [endpoint] [docid] [doc]")
 						} else {
 							epid := c.Args()[0]
 							docid := c.Args()[1]
 							doc := strings.Join(c.Args()[2:], " ")
 							fmt.Println("Insert into endpoint: ", epid)
 							fmt.Println(doc)
-							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document": %s, "doc_id": "%s", "domain_id":"%s"}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document": %s, "doc_id": "%s", "domain_id":"%s"}`,
 								epid, connection.auth.token, doc, docid, domain)
 							where := connection.host + "/insert"
 							resp, err := postJSON(where, jsonS)
-							if (err != nil) {
+							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
 								fmt.Println("RESP:", resp)
@@ -520,22 +520,22 @@ func main() {
 					},
 				},
 				{
-					Name: "delete",
-					Aliases: []string{"del", "rm", "remove"},
+					Name:      "delete",
+					Aliases:   []string{"del", "rm", "remove"},
 					ArgsUsage: "[endpoint] [docid]",
-					Usage: "Delete a document in endpoint",
+					Usage:     "Delete a document in endpoint",
 					Action: func(c *cli.Context) error {
 						if c.NArg() != 2 {
-							fmt.Println("Expected two arguments: [id] [docid]");
+							fmt.Println("Expected two arguments: [id] [docid]")
 						} else {
 							epid := c.Args()[0]
 							docid := c.Args()[1]
 							fmt.Println("Delete (Endpoint, Docid): (", epid, ",", docid, ")")
-							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "doc_id":"%s", "domain_id":"%s"}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "doc_id":"%s", "domain_id":"%s"}`,
 								epid, connection.auth.token, docid, domain)
 							where := connection.host + "/delete"
 							resp, err := postJSON(where, jsonS)
-							if (err != nil) {
+							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
 								fmt.Println("RESP:", resp)
@@ -545,24 +545,24 @@ func main() {
 					},
 				},
 				{
-					Name: "update",
-					Aliases: []string{"up"},
+					Name:      "update",
+					Aliases:   []string{"up"},
 					ArgsUsage: "[endpoint] [docid] [doc]",
-					Usage: "Update a doc in an endpoint",
+					Usage:     "Update a doc in an endpoint",
 					Action: func(c *cli.Context) error {
 						if c.NArg() < 3 {
-							fmt.Println("Expected three arguments: [endpoint] [docid] [doc]");
+							fmt.Println("Expected three arguments: [endpoint] [docid] [doc]")
 						} else {
 							epid := c.Args()[0]
 							docid := c.Args()[1]
 							doc := strings.Join(c.Args()[2:], " ")
 							fmt.Println("Update (Endpoint, Docid): (", epid, ",", docid, ")")
 							fmt.Println(doc)
-							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document": %s, "doc_id": "%s", "domain_id":"%s"}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "document": %s, "doc_id": "%s", "domain_id":"%s"}`,
 								epid, connection.auth.token, doc, docid, domain)
 							where := connection.host + "/update"
 							resp, err := postJSON(where, jsonS)
-							if (err != nil) {
+							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
 								fmt.Println("RESP:", resp)
@@ -572,22 +572,22 @@ func main() {
 					},
 				},
 				{
-					Name: "read",
-					Aliases: []string{"r", "get"},
-					Usage: "Read document from an endpoint",
+					Name:      "read",
+					Aliases:   []string{"r", "get"},
+					Usage:     "Read document from an endpoint",
 					ArgsUsage: "[endpoint] [docid]",
 					Action: func(c *cli.Context) error {
 						if c.NArg() != 2 {
-							fmt.Println("Expected three arguments: [endpoint] [docid]");
+							fmt.Println("Expected three arguments: [endpoint] [docid]")
 						} else {
 							epid := c.Args()[0]
 							docid := c.Args()[1]
 							fmt.Println("Read Doc: ", epid, docid)
-							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "doc_id": "%s", "domain_id":"%s"}`, 
+							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "doc_id": "%s", "domain_id":"%s"}`,
 								epid, connection.auth.token, docid, domain)
 							where := connection.host + "/read"
 							resp, err := postJSON(where, jsonS)
-							if (err != nil) {
+							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
 								fmt.Println("RESP:", resp)
@@ -610,7 +610,7 @@ func main() {
 		fmt.Println("Unknown command:", c.Args().First())
 
 		// continue to repl loop if needed
-		if (useREPL) {
+		if useREPL {
 			c.App.Run([]string{os.Args[0], "repl"})
 		}
 
@@ -618,6 +618,5 @@ func main() {
 	}
 	app.EnableBashCompletion = true
 
-	
 	app.Run(os.Args)
 }

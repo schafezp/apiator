@@ -1,11 +1,10 @@
 package config
 
 const (
-	couchbaseServerAddr = "137.112.104.106:8091"
-	solrServerAddr = "http://apiator-2.csse.rose-hulman.edu:8983"
+	couchbaseServerAddr = "http://apiator-2.csse.rose-hulman.edu:8091"
 	redisServerAddr     = "apiator-3.csse.rose-hulman.edu:6379"
 	redisServerPassword = "AK1lTOuHyUNT5sN4JHP7"
-	solrServerHost = "http://apiator-2.csse.rose-hulman.edu"
+	solrServerHost = "apiator-2.csse.rose-hulman.edu"
 	solrServerPort = 8983
 	solrCoreName = "gettingstarted"
 )
