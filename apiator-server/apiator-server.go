@@ -832,10 +832,26 @@ func main() {
 			return
 		}
 		_, err = bucket.Remove(user, 0)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to remove user in couchbase",
+				"error":   err.Error(),
+			})
+			return
+		}
+		err = resetUserTokenRedis(user)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to remove user in redis",
+				"error":   err.Error(),
+			})
+			return
+		}
 		c.JSON(200, gin.H{
 			"message": "insert successful",
 			"err":     err,
 		})
+
 	})
 	r.POST("/auth", func(c *gin.Context) {
 		var err error
