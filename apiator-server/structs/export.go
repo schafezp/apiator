@@ -81,3 +81,8 @@ type UserPermissionsDoc struct {
 type TokenDoc struct {
 	Token string `json:"token" binding:"required"`
 }
+
+type PasswordDoc struct {
+	Token    string `json:"token" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}

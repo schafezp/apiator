@@ -635,6 +635,62 @@ func main() {
 			"err":     err,
 		})
 	})
+	r.POST("/change-password", func(c *gin.Context) {
+		bucket, bucketerror := cluster.OpenBucket("users", "")
+		if bucketerror != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to open couchbase bucket",
+				"error":   bucketerror.Error(),
+			})
+			return
+		}
+		var form structs.PasswordDoc
+		c.Bind(&form)
+		authed, user := decodeAuthUserOrFail(form.Token)
+		if authed == false {
+			c.JSON(402, gin.H{
+				"message": "unauthorized user",
+			})
+			return
+		}
+		hashed, err := HashPassword(form.Password)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to hash password",
+			})
+			return
+		}
+		var loginDoc structs.UserCRUD
+		_, err = bucket.Get(user, &loginDoc)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to get user doc",
+				"err":     err,
+			})
+			return
+		}
+		loginDoc.Doc.Password = hashed
+		_, err = bucket.Replace(user, loginDoc.Doc, 0, 0)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to replace user doc",
+				"err":     err,
+			})
+			return
+		}
+		err = resetUserTokenRedis(user)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "error resetting redis token",
+				"err":     err,
+			})
+			return
+		}
+		c.JSON(200, gin.H{
+			"message": "password changed, reauth required",
+			"err":     err,
+		})
+	})
 	r.POST("/delete-user", func(c *gin.Context) {
 		var err error
 		bucket, bucketerror := cluster.OpenBucket("users", "")
@@ -650,8 +706,7 @@ func main() {
 		authed, user := decodeAuthUserOrFail(form.Token)
 		if authed == false {
 			c.JSON(402, gin.H{
-				"message": "request failed, unable to open couchbase bucket",
-				"error":   bucketerror.Error(),
+				"message": "unauthorized user",
 			})
 			return
 		}
@@ -1437,7 +1492,7 @@ func main() {
 			})
 			return
 		}
-		authed, _ := decodeAuthUserOrFail(json.Token)
+		authed, _ := decodeAuthUserOrFail(inputJson.Token)
 		if authed == false {
 			c.JSON(401, gin.H{
 				"message": "unauthorized user!",
