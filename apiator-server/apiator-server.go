@@ -29,13 +29,10 @@ var (
 	cluster,connectionerror = gocb.Connect(conf.CouchbaseServerAddr)
 )
 
-//TODO: consider best way to move this into sync
-func redisOperationFail(operation string) {
-	fmt.Printf("Redis operation failed: %s \n", operation)
-	operationsToApply = append(operationsToApply, sync.QueuedOperation{DbType: 1, Operation: operation})
-	// fmt.Printf("Redis operation failed: %s \n",operation)
+func solrOperationFail(operation structs.DataCRUD){
+	fmt.Printf("Solr operation failed: %s \n", operation)
+	operationsToApply = append(operationsToApply, sync.QueuedOperation{DbType: 2, Operation: operation})
 }
-
 
 
 func HashPassword(password string) (string, error) {
@@ -118,14 +115,14 @@ func storeUserTokenRedis(username, jwt string) error {
 	})
 	err := client.SAdd("usernames", username).Err()
 	if err != nil {
-		q1 := fmt.Sprintf("sadd usernames %s", username)
-		redisOperationFail(q1)
+		// q1 := fmt.Sprintf("sadd usernames %s", username)
+		return err
 	}
 	// client.SAdd("jwts",jwt)
 	err = client.Set(fmt.Sprintf("token_%s", username), jwt, 0).Err()
 	if err != nil {
-		q2 := fmt.Sprintf("set token_%s %s", username, jwt)
-		redisOperationFail(q2)
+		// q2 := fmt.Sprintf("set token_%s %s", username, jwt)
+		return err
 	}
 
 	return err
@@ -141,10 +138,9 @@ func resetUserTokenRedis(username string) error {
 	err := storeUserTokenRedis(username, "")
 
 	if err != nil {
-		q1 := fmt.Sprintf("usernames %s", username)
-		q2 := fmt.Sprintf("token_%s", username)
-		redisOperationFail(q1)
-		redisOperationFail(q2)
+		return err
+		// q1 := fmt.Sprintf("usernames %s", username)
+		// q2 := fmt.Sprintf("token_%s", username)
 	}
 
 	return err
@@ -995,6 +991,7 @@ func main() {
 						})
 						return
 					}
+					_,err = dbsolr.SolrInsertEndpoint(json)
 					c.JSON(200, gin.H{
 						"message": "document inserted",
 					})
