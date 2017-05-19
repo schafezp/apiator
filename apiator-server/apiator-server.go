@@ -670,6 +670,9 @@ func main() {
 			return
 		}
 		loginDoc.Doc.Password = hashed
+		if len(loginDoc.Doc.Domains) == 0 {
+			loginDoc.Doc.Domains = make([]structs.DomainDoc, 0)
+		}
 		_, err = bucket.Replace(user, loginDoc.Doc, 0, 0)
 		if err != nil {
 			c.JSON(402, gin.H{
