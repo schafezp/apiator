@@ -1196,8 +1196,8 @@ func main() {
 						"error":   err.Error(),
 					})
 				}
-				has_write_permission, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 2)
-				if has_write_permission == true {
+				has_del_permission, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 4)
+				if has_del_permission == true {
 					var endpoint_bucket_name string
 					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
 					endpoint_bucket_name = json.DomainID + endpoint_bucket_name
