@@ -245,7 +245,7 @@ func main() {
 				}
 				newdomain := c.Args().First()
 				jsonS := fmt.Sprintf(`{"token":"%s", "domain_id":"%s"}`,
-					connection.auth.token, domain)
+					connection.auth.token, newdomain)
 				where := connection.host + "/create-domain"
 
 				resp, err := postJSON(where, jsonS)
@@ -286,16 +286,20 @@ func main() {
 		{
 			Name: "create-user",
 			Usage: "Make a new user",
-			ArgsUsage: "[username] [password]",
+			ArgsUsage: "[username] [password] (server)",
 			Action: func(c *cli.Context) error {
 				if c.NArg() < 2 {
-					fmt.Println("Expected two arguments: [username] [password]")
+					fmt.Println("Expected 2+ arguments: [username] [password] (server)")
 				} else {
 					uname := c.Args()[0]
 					upass := c.Args()[1]
+					where := connection.host
+					if (c.NArg() > 2) {
+						where = c.Args()[2]
+					}
 					jsonS := fmt.Sprintf(`{"username":"%s", "password":"%s"}`,
 						uname, upass)
-					where := connection.host + "/create-user"
+					where = where + "/create-user"
 					resp, err := postJSON(where, jsonS)
 					if err != nil {
 						fmt.Println("ERR:", err)
@@ -667,7 +671,8 @@ func main() {
 							fmt.Println("Read Doc: ", epid, docid)
 							jsonS := fmt.Sprintf(`{"id":"%s", "token":"%s", "doc_id": "%s", "domain_id":"%s"}`,
 								epid, connection.auth.token, docid, domain)
-							where := connection.host + "/read"
+							fmt.Println("SENDING: ", jsonS)
+							where := connection.host + "/get"
 							resp, err := postJSON(where, jsonS)
 							if err != nil {
 								fmt.Println("ERR:", err)
