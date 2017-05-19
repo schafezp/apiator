@@ -38,6 +38,14 @@ func postJSON(where string, jsonString string) (*http.Response, error) {
 	return client.Do(req)
 }
 
+func printResponse(resp *http.Response) {
+	str, err := ioutil.ReadAll(resp.Body)
+	if (err != nil) {
+		fmt.Println(err)
+	}
+	fmt.Println("RESP: ", resp.StatusCode, string(str))
+} 
+
 func checkConenction() bool {
 	// in the future, check to see if token expires, etc.
 	conn := (connection != ConnectionData{})
@@ -244,7 +252,7 @@ func main() {
 				if err != nil {
 					fmt.Println("ERR:", err)
 				} else {
-					fmt.Println("RESP:", resp)
+					printResponse(resp)
 					if resp.StatusCode == 200 {
 						domain = newdomain
 					}
@@ -265,7 +273,7 @@ func main() {
 				if (err != nil) {
 					fmt.Println("ERR:", err)
 				} else {
-					fmt.Println("RESP:", resp)
+					printResponse(resp)
 					if (resp.StatusCode == 200) {
 						fmt.Println("Deleted self!")
 						connection = ConnectionData{}
@@ -292,7 +300,7 @@ func main() {
 					if err != nil {
 						fmt.Println("ERR:", err)
 					} else {
-						fmt.Println("RESP:", resp)
+						printResponse(resp)
 					}
 				}
 				return nil
@@ -316,7 +324,7 @@ func main() {
 					if err != nil {
 						fmt.Println("ERR:", err)
 					} else {
-						fmt.Println("RESP:", resp)
+						printResponse(resp)
 						if (resp.StatusCode == 200) {
 							fmt.Println("Password Changed! (You have been disconnected, please reconnect)")
 							connection = ConnectionData{}
@@ -355,7 +363,7 @@ func main() {
 							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
-								fmt.Println("RESP:", resp)
+								printResponse(resp)
 							}
 						}
 						return nil
@@ -379,7 +387,7 @@ func main() {
 							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
-								fmt.Println("RESP:", resp)
+								printResponse(resp)
 							}
 						}
 						return nil
@@ -404,7 +412,7 @@ func main() {
 							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
-								fmt.Println("RESP:", resp)
+								printResponse(resp)
 							}
 						}
 						return nil
@@ -428,7 +436,7 @@ func main() {
 							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
-								fmt.Println("RESP:", resp)
+								printResponse(resp)
 							}
 						}
 						return nil
@@ -481,7 +489,7 @@ func main() {
 							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
-								fmt.Println("RESP:", resp)
+								printResponse(resp)
 							}
 						}
 						return nil
@@ -507,7 +515,7 @@ func main() {
 							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
-								fmt.Println("RESP:", resp)
+								printResponse(resp)
 							}
 						}
 						return nil
@@ -531,7 +539,7 @@ func main() {
 							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
-								fmt.Println("RESP:", resp)
+								printResponse(resp)
 							}
 						}
 						return nil
@@ -549,7 +557,7 @@ func main() {
 						if err != nil {
 							fmt.Println("ERR:", err)
 						} else {
-							fmt.Println("RESP:", resp)
+							printResponse(resp)
 						}
 						return nil
 					},
@@ -587,7 +595,7 @@ func main() {
 							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
-								fmt.Println("RESP:", resp)
+								printResponse(resp)
 							}
 						}
 						return nil
@@ -612,7 +620,7 @@ func main() {
 							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
-								fmt.Println("RESP:", resp)
+								printResponse(resp)
 							}
 						}
 						return nil
@@ -639,7 +647,7 @@ func main() {
 							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
-								fmt.Println("RESP:", resp)
+								printResponse(resp)
 							}
 						}
 						return nil
@@ -664,7 +672,7 @@ func main() {
 							if err != nil {
 								fmt.Println("ERR:", err)
 							} else {
-								fmt.Println("RESP:", resp)
+								printResponse(resp)
 							}
 						}
 						return nil
