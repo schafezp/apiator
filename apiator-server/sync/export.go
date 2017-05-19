@@ -2,13 +2,13 @@ package sync
 
 import (
 	"fmt"
-	"github.com/go-redis/redis"
 )
-
+import ".././dbsolr"
 import ".././config"
+import ".././structs"
 
-//When SOLR or Redis is down and we receive a request we should store it rather than ignoring it
-//to store it we will use a channel of Queued Operations
+//If SOLR goes down we want to store the 
+
 
 //QueuedOperation represents a queued instruction to preform 
 type QueuedOperation struct {
@@ -17,7 +17,7 @@ type QueuedOperation struct {
 	//          1 -> redis
 	//          2 -> solr
 	DbType int `form:"dbtype" json:"dbtype" binding:"required"`
-	Operation string `form:"operation" json:"operation" binding:"required"`
+	Operation structs.DataCRUD `form:"operation" json:"operation" binding:"required"`
 }
 
 //calling this function with go routine will sync the dbs
@@ -27,26 +27,15 @@ func Syncdbs(operationsToApply []QueuedOperation,  conf config.Config){
 		switch  op.DbType {
 		case 0://couchbase
 			fmt.Println("Don't handle couchbase queued ops'")
-			// switch op.functtype:
-			//do stuff depending on functtype passing in necessary args
-
 		case 1://redis
-			client := redis.NewClient(&redis.Options{
-				Addr:     conf.RedisServerAddr,
-				Password: conf.RedisServerPassword,
-				DB:       0, // use default DB
-			})
-			fmt.Println("Run failed redis command: %s",op.Operation)
-			fmt.Println(op.Operation)
-			err := client.Eval(op.Operation,[]string{})
-			//TODO: putting back here is dangerous if too many "bad" redis commands stack up
+			fmt.Println("Don't handle redis queued ops'")
+		case 2://solr
+			fmt.Println("Don't handle solr queued ops'")
+			_,err := dbsolr.SolrInsertEndpoint(op.Operation)
+
 			if err == nil{//if successful then remove that slice part
 				operationsToApply = append(operationsToApply[:0], operationsToApply[1:]...)
 			}
-			
-		case 2://solr
-			fmt.Println("Don't handle solr queued ops'")
-			
 		default:
 		}
 	}

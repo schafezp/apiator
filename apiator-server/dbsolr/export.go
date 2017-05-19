@@ -3,6 +3,7 @@ package dbsolr
 
 import ("github.com/rtt/Go-Solr"
 	"fmt"
+	"strings"
 	
 )
 //this file is named export.go by convention
@@ -91,20 +92,25 @@ func SolrInsertUser(user *structs.Login)(bool,error){
 		return resp.Success,err
 }
 }
-func SolrInsertEndpoint(endpoint *structs.EndpointDoc)(bool,error){
+
+//insert data at a given endpoint
+func SolrInsertEndpoint(datacrud structs.DataCRUD)(bool,error){
 	var resp *solr.UpdateResponse
 	var err error;
 	s, err := solr.Init(conf.SolrServerHost, conf.SolrServerPort, conf.SolrCoreName)
 
 	if err != nil{return false,err}
 
-	fmt.Println("User to insert:")
-	fmt.Println(endpoint)
+	endpointBucketName := strings.Replace(datacrud.ID, "/", "-", -1)
+	endpointBucketName = datacrud.DomainID + endpointBucketName
+	
+	fmt.Println("EndpointBucketName:")
+	fmt.Println(endpointBucketName)
 	//TODO: put apporopriate fields
 	// https://github.com/rtt/Go-Solr
 	f := map[string]interface{}{
 		"add": []interface{}{
-			map[string]interface{}{"owner": endpoint.Owner, "index": endpoint.Index,"indexed": endpoint.Indexed},
+			map[string]interface{}{"ID": datacrud.ID, "DomainID": datacrud.DomainID,"Doc": datacrud.DomainID, "endpointBucketName": endpointBucketName},
 		},
 	}
 		
@@ -115,4 +121,34 @@ func SolrInsertEndpoint(endpoint *structs.EndpointDoc)(bool,error){
 	}
 	return resp.Success,err
 	
+}
+
+func SolrSearchEndpoint(id, domainId string)(interface{},error){
+	s, err := solr.Init(conf.SolrServerHost, conf.SolrServerPort, conf.SolrCoreName)
+
+	if err != nil{return nil,err}
+
+	endpointBucketName := strings.Replace(id, "/", "-", -1)
+	endpointBucketName = domainId + endpointBucketName
+	
+	qstring := fmt.Sprintf("endpointBucketName:*%s*",endpointBucketName)
+	
+	q := solr.Query{
+		Params: solr.URLParamMap{
+			"q":           []string{qstring},
+		},
+	}
+	// perform the query, checking for errors
+	res, err := s.Select(&q)
+
+	if err != nil { return nil,err}
+	results := res.Results
+
+	for i := 0; i < results.Len(); i++ {
+		fmt.Println("ID:", results.Get(i).Field("ID"))
+		fmt.Println("Doc:", results.Get(i).Field("Doc"))
+
+		fmt.Println("")
+	}
+	return results,nil
 }
