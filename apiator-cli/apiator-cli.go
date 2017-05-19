@@ -252,6 +252,76 @@ func main() {
 				return nil
 			},
 		},
+		// Delete self
+		{
+			Name: "delete-me",
+			Usage: "Delete the logged in user",
+			Action: func(c *cli.Context) error {
+				jsonS := fmt.Sprintf(`{"token":"%s"}`, 
+					connection.auth.token)
+				where := connection.host + "/delete-user"
+				fmt.Println(jsonS)
+				resp, err := postJSON(where, jsonS)
+				if (err != nil) {
+					fmt.Println("ERR:", err)
+				} else {
+					fmt.Println("RESP:", resp)
+					if (resp.StatusCode == 200) {
+						fmt.Println("Deleted self!")
+						connection = ConnectionData{}
+					}
+				}
+				return nil
+			},
+		},
+		// Create user
+		{
+			Name: "create-user",
+			Usage: "Make a new user",
+			ArgsUsage: "[username] [password]",
+			Action: func(c *cli.Context) error {
+				if c.NArg() < 2 {
+					fmt.Println("Expected two arguments: [username] [password]")
+				} else {
+					uname := c.Args()[0]
+					upass := c.Args()[1]
+					jsonS := fmt.Sprintf(`{"username":"%s", "password":"%s"}`,
+						uname, upass)
+					where := connection.host + "/create-user"
+					resp, err := postJSON(where, jsonS)
+					if err != nil {
+						fmt.Println("ERR:", err)
+					} else {
+						fmt.Println("RESP:", resp)
+					}
+				}
+				return nil
+			},
+		},
+		// Update password
+		{
+			Name: "update-password",
+			Usage: "Update password",
+			Aliases: []string{"update-pw"},
+			ArgsUsage: "[password]",
+			Action: func(c *cli.Context) error {
+				if c.NArg() != 1 {
+					fmt.Println("Expected one argument: [password]")
+				} else {
+					pw := c.Args()[0]
+					jsonS := fmt.Sprintf(`{"token":"%s", "password":"%s"}`,
+						connection.auth.token, pw)
+					where := connection.host + "/update-password"
+					resp, err := postJSON(where, jsonS)
+					if err != nil {
+						fmt.Println("ERR:", err)
+					} else {
+						fmt.Println("RESP:", resp)
+					}
+				}
+				return nil
+			},
+		},
 
 		// endpoints (CRUD)
 		{
