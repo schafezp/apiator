@@ -22,7 +22,7 @@ type QueuedOperation struct {
 
 //calling this function with go routine will sync the dbs
 // func syncdbs(syncRedis,syncSolr, quit chan int){
-func Syncdbs(operationsToApply []QueuedOperation,  conf config.Config){
+func Syncdbs(operationsToApply []QueuedOperation,  conf config.Config)([]QueuedOperation){
 	for _, op := range operationsToApply{
 		switch  op.DbType {
 		case 0://couchbase
@@ -39,6 +39,7 @@ func Syncdbs(operationsToApply []QueuedOperation,  conf config.Config){
 		default:
 		}
 	}
+	return operationsToApply
 }
 
 func LogStoredOps(operationsToApply []QueuedOperation){

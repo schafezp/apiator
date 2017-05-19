@@ -45,7 +45,7 @@ func SolrRetrieveAllUsers()(interface{},error){
 }
 func SolrRetrieveUsers(username string)(interface{},error){
 	s, err := solr.Init(conf.SolrServerHost, conf.SolrServerPort, conf.SolrCoreName)
-
+	
 	if err != nil{return nil,err}
 
 	qstring := fmt.Sprintf("username:*%s*",username)
@@ -110,7 +110,7 @@ func SolrInsertEndpoint(datacrud structs.DataCRUD)(bool,error){
 	// https://github.com/rtt/Go-Solr
 	f := map[string]interface{}{
 		"add": []interface{}{
-			map[string]interface{}{"ID": datacrud.ID, "DomainID": datacrud.DomainID,"Doc": datacrud.DomainID, "endpointBucketName": endpointBucketName},
+			map[string]interface{}{"ID": datacrud.ID, "DomainID": datacrud.DomainID,"Doc": datacrud.DomainID, "EndpointBucketName": endpointBucketName},
 		},
 	}
 		
@@ -123,7 +123,10 @@ func SolrInsertEndpoint(datacrud structs.DataCRUD)(bool,error){
 	
 }
 
-func SolrSearchEndpoint(id, domainId string)(interface{},error){
+
+//searches on endpointBucketName
+//TODO: Write a function to allow search 
+func SolrSearchEndpoint(id, domainId, searchString string)(interface{},error){
 	s, err := solr.Init(conf.SolrServerHost, conf.SolrServerPort, conf.SolrCoreName)
 
 	if err != nil{return nil,err}
@@ -131,7 +134,7 @@ func SolrSearchEndpoint(id, domainId string)(interface{},error){
 	endpointBucketName := strings.Replace(id, "/", "-", -1)
 	endpointBucketName = domainId + endpointBucketName
 	
-	qstring := fmt.Sprintf("endpointBucketName:*%s*",endpointBucketName)
+	qstring := fmt.Sprintf("EndpointBucketName:%s,Doc:",endpointBucketName,searchString)
 	
 	q := solr.Query{
 		Params: solr.URLParamMap{
