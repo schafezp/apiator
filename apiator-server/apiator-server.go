@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/go-redis/redis"
 	"golang.org/x/crypto/bcrypt"
@@ -35,57 +36,7 @@ func redisOperationFail(operation string) {
 	// fmt.Printf("Redis operation failed: %s \n",operation)
 }
 
-type Login struct {
-	Username string `form:"username" json:"username" binding:"required"`
-	Password string `form:"password" json:"password" binding:"required"`
-}
 
-type DataCRUD struct {
-	ID       string      `json:"id" binding:"required"`
-	DomainID string      `json:"domain_id" binding:"required"`
-	Token    string      `json:"token" binding:"required"`
-	Doc      interface{} `json:"document"`
-	DocID    string      `json:"doc_id"`
-}
-
-type UserCRUD struct {
-	ID    string  `json:"id"`
-	Token string  `json:"token" binding:"required"`
-	Doc   UserDoc `json:"document"`
-}
-
-type UserDoc struct {
-	Domains  []DomainDoc `json:"domains" binding:"required"`
-	Password string      `json:"password"`
-}
-
-type DomainDoc struct {
-	DomainID  string               `json:"domain_id" binding:"required"`
-	Owner     bool                 `json:"owner" binding:"required"`
-	Endpoints []DomainEndpointsDoc `json:"endpoints" binding:"required"`
-}
-
-type DomainEndpointsDoc struct {
-	Name        string `json:"name" binding:"required"`
-	Permissions int    `json:"permissions" binding:"required"`
-}
-
-type DomainCRUD struct {
-	Token    string `json:"token" binding:"required"`
-	DomainID string `json:"domain_id" binding:"required"`
-}
-
-type UserPermissionsDoc struct {
-	ID          string `json:"id" binding:"required"`
-	Token       string `json:"token" binding:"required"`
-	DomainID    string `json:"domain_id" binding:"required"`
-	Permissions int    `json:"permissions"`
-	Username    string `json:"username" binding:"required"`
-}
-
-type TokenDoc struct {
-	Token string `json:"token" binding:"required"`
-}
 
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
@@ -211,15 +162,15 @@ func retrieveUserTokenRedis(username string) (string, error) {
 	return val, err
 }
 
-func checkEndpointPermission(username string, domain string, endpoint string, permission int) (bool, error) {
-	var user_doc UserDoc
+func checkEndpointPermission(username string, domain string, endpointArg string, permission int) (bool, error) {
+	var userDoc endpoint.UserDoc
 	var err error
 	bucket, err := cluster.OpenBucket("users", "")
 	if err != nil {
 		return false, err
 	}
-	_, err = bucket.Get(username, &user_doc)
-	domains := user_doc.Domains
+	_, err = bucket.Get(username, &userDoc)
+	domains := userDoc.Domains
 	if err != nil {
 		return false, err
 	}
@@ -227,7 +178,7 @@ func checkEndpointPermission(username string, domain string, endpoint string, pe
 		if domain_doc.DomainID == domain {
 			endpoints := domain_doc.Endpoints
 			for _, endpoint_doc := range endpoints {
-				if endpoint == endpoint_doc.Name {
+				if endpointArg == endpoint_doc.Name {
 					return endpoint_doc.Permissions&permission > 0, nil
 				}
 			}
@@ -237,17 +188,17 @@ func checkEndpointPermission(username string, domain string, endpoint string, pe
 }
 
 func checkOwner(username, domain string) (bool, error) {
-	var user_doc UserDoc
+	var userDoc endpoint.UserDoc
 	var err error
 	bucket, err := cluster.OpenBucket("users", "")
 	if err != nil {
 		return false, err
 	}
-	_, err = bucket.Get(username, &user_doc)
+	_, err = bucket.Get(username, &userDoc)
 	if err != nil {
 		return false, err
 	}
-	domains := user_doc.Domains
+	domains := userDoc.Domains
 	for _, domain_doc := range domains {
 		if domain_doc.DomainID == domain {
 			return domain_doc.Owner, nil
@@ -274,7 +225,7 @@ func createBucket(bucket_name string) (bool, error) {
 	}
 	verified := false
 	for !verified {
-		bucket, err := cluster.OpenBucket(bucket_name, "")
+		_, err := cluster.OpenBucket(bucket_name, "")
 		if err == nil {
 			verified = true
 		}
@@ -282,28 +233,28 @@ func createBucket(bucket_name string) (bool, error) {
 	return verified, nil
 }
 
-func createUserEndpoints(username, domain, endpoint string) error {
-	var user_doc UserDoc
+func createUserEndpoints(username, domain, endpointArg string) error {
+	var userDoc endpoint.UserDoc
 	var err error
 	bucket, err := cluster.OpenBucket("users", "")
 	if err != nil {
 		return err
 	}
-	_, err = bucket.Get(username, &user_doc)
+	_, err = bucket.Get(username, &userDoc)
 	if err != nil {
 		return err
 	}
-	domains := user_doc.Domains
+	domains := userDoc.Domains
 	for index, domain_doc := range domains {
 		if domain_doc.DomainID == domain {
 			endpoints := domain_doc.Endpoints
 			domain_doc.Endpoints = append(endpoints,
-				DomainEndpointsDoc{
-					Name:        endpoint,
+				endpoint.DomainEndpointsDoc{
+					Name:        endpointArg,
 					Permissions: 7,
 				})
-			user_doc.Domains[index].Endpoints = domain_doc.Endpoints
-			_, err = bucket.Replace(username, &user_doc,
+			userDoc.Domains[index].Endpoints = domain_doc.Endpoints
+			_, err = bucket.Replace(username, &userDoc,
 				0, 0)
 			if err != nil {
 				return err
@@ -320,30 +271,30 @@ func removeEndpointFromStatistics(bucket *gocb.Bucket, bucket_id string) error {
 	return err
 }
 
-func updateUserEndpoints(username string, domain string, endpoint string, permissions int) error {
-	var user_doc UserDoc
+func updateUserEndpoints(username string, domain string, endpointArg string, permissions int) error {
+	var userDoc endpoint.UserDoc
 	var err error
 	bucket, err := cluster.OpenBucket("users", "")
 	if err != nil {
 		return err
 	}
-	_, err = bucket.Get(username, &user_doc)
+	_, err = bucket.Get(username, &userDoc)
 	if err != nil {
 		return err
 	}
-	domains := user_doc.Domains
+	domains := userDoc.Domains
 	for index, domain_doc := range domains {
 		if domain_doc.DomainID == domain {
 			endpoints := domain_doc.Endpoints
 			for endpoint_index, endpoints_doc := range endpoints {
-				if endpoints_doc.Name == endpoint {
-					endpoints[endpoint_index] = DomainEndpointsDoc{
-						Name:        endpoint,
+				if endpoints_doc.Name == endpointArg {
+					endpoints[endpoint_index] = endpoint.DomainEndpointsDoc{
+						Name:        endpointArg,
 						Permissions: permissions,
 					}
 					domain_doc.Endpoints = endpoints
-					user_doc.Domains[index].Endpoints = domain_doc.Endpoints
-					_, err = bucket.Replace(username, &user_doc,
+					userDoc.Domains[index].Endpoints = domain_doc.Endpoints
+					_, err = bucket.Replace(username, &userDoc,
 						0, 0)
 					if err != nil {
 						return err
@@ -351,13 +302,13 @@ func updateUserEndpoints(username string, domain string, endpoint string, permis
 					return nil
 				}
 			}
-			endpoints = append(endpoints, DomainEndpointsDoc{
-				Name:        endpoint,
+			endpoints = append(endpoints, endpoint.DomainEndpointsDoc{
+				Name:        endpointArg,
 				Permissions: permissions,
 			})
 			domain_doc.Endpoints = endpoints
-			user_doc.Domains[index].Endpoints = domain_doc.Endpoints
-			_, err = bucket.Replace(username, &user_doc,
+			userDoc.Domains[index].Endpoints = domain_doc.Endpoints
+			_, err = bucket.Replace(username, &userDoc,
 				0, 0)
 			if err != nil {
 				return err
@@ -365,18 +316,18 @@ func updateUserEndpoints(username string, domain string, endpoint string, permis
 			return nil
 		}
 	}
-	domains = append(domains, DomainDoc{
+	domains = append(domains, endpoint.DomainDoc{
 		DomainID: domain,
 		Owner:    false,
-		Endpoints: []DomainEndpointsDoc{
-			DomainEndpointsDoc{
-				Name:        endpoint,
+		Endpoints: []endpoint.DomainEndpointsDoc{
+			endpoint.DomainEndpointsDoc{
+				Name:        endpointArg,
 				Permissions: permissions,
 			},
 		},
 	})
-	user_doc.Domains = domains
-	_, err = bucket.Replace(username, &user_doc,
+	userDoc.Domains = domains
+	_, err = bucket.Replace(username, &userDoc,
 		0, 0)
 	if err != nil {
 		return err
@@ -384,26 +335,26 @@ func updateUserEndpoints(username string, domain string, endpoint string, permis
 	return nil
 }
 
-func deleteUserEndpoints(username string, domain string, endpoint string) error {
-	var user_doc UserDoc
+func deleteUserEndpoints(username string, domain string, endpointArg string) error {
+	var userDoc endpoint.UserDoc
 	var err error
 	bucket, err := cluster.OpenBucket("users", "")
 	if err != nil {
 		return err
 	}
-	_, err = bucket.Get(username, &user_doc)
+	_, err = bucket.Get(username, &userDoc)
 	if err != nil {
 		return err
 	}
-	domains := user_doc.Domains
+	domains := userDoc.Domains
 	for index, domain_doc := range domains {
 		if domain_doc.DomainID == domain {
 			endpoints := domain_doc.Endpoints
 			for endpoint_index, endpoints_doc := range endpoints {
-				if endpoints_doc.Name == endpoint {
+				if endpoints_doc.Name == endpointArg {
 					domain_doc.Endpoints = append(endpoints[:endpoint_index], endpoints[endpoint_index+1:]...)
-					user_doc.Domains[index].Endpoints = domain_doc.Endpoints
-					_, err = bucket.Replace(username, &user_doc,
+					userDoc.Domains[index].Endpoints = domain_doc.Endpoints
+					_, err = bucket.Replace(username, &userDoc,
 						0, 0)
 					if err != nil {
 						return err
@@ -423,9 +374,9 @@ func bucketInsert(bucket *gocb.Bucket, document interface{}, id string) error {
 
 // Use document.Username as key always
 func userBucketInsert(bucket *gocb.Bucket, document endpoint.Login) error {
-	var json UserDoc
+	var json endpoint.UserDoc
 	json.Password = document.Password
-	json.Domains = make([]DomainDoc, 0)
+	json.Domains = make([]endpoint.DomainDoc, 0)
 	_, err := bucket.Insert(document.Username, json, 0)
 	return err
 }
@@ -438,10 +389,11 @@ func storeFailedOperation() {
 
 
 func main() {
-	var bucketerror error
-	var geterror error
-	var connecterror error
-	cluster, connecterror := gocb.Connect(conf.CouchbaseServerAddr)
+	cluster, err := gocb.Connect(conf.CouchbaseServerAddr)
+	if err != nil{
+		log.Panic(err)
+	}
+	
 	r := gin.Default()
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -640,7 +592,7 @@ func main() {
 			})
 			return
 		}
-		var form TokenDoc
+		var form endpoint.TokenDoc
 		c.Bind(&form)
 		authed, user := decodeAuthUserOrFail(form.Token)
 		if authed == false {
@@ -709,7 +661,7 @@ func main() {
 			})
 			return
 		}
-		var form Login
+		var form endpoint.Login
 		c.Bind(&form)
 		username := form.Username
 		password := form.Password
@@ -789,7 +741,7 @@ func main() {
 			})
 			return
 		}
-		bucket, err = cluster.OpenBucket("endpoints", "")
+		bucket, err := cluster.OpenBucket("endpoints", "")
 		if err != nil {
 			c.JSON(402, gin.H{
 				"message": "unable to connect" +
@@ -831,8 +783,8 @@ func main() {
 
 	})
 	r.POST("/get-endpoint", func(c *gin.Context) {
-		var json EndpointCRUD
-		var document EndpointDoc
+		var json endpoint.EndpointCRUD
+		var document endpoint.EndpointDoc
 		var err error
 		err = c.BindJSON(&json)
 		if err == nil {
@@ -840,7 +792,7 @@ func main() {
 			owner, _ := checkOwner(authUser, json.DomainID)
 			if (authed == true) && (owner == true) {
 				bucket_id := json.DomainID + json.ID
-				bucket, err = cluster.OpenBucket("endpoints", "")
+				bucket, err := cluster.OpenBucket("endpoints", "")
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to connect" +
@@ -872,15 +824,14 @@ func main() {
 		}
 	})
 	r.POST("/delete-endpoint", func(c *gin.Context) {
-		var json EndpointCRUD
+		var json endpoint.EndpointCRUD
 		var cluster_manager *gocb.ClusterManager
-		var err error
 		cluster_manager = cluster.Manager("Administrator", "password")
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			owner, _ := checkOwner(authUser, json.DomainID)
 			if (authed == true) && (owner == true) {
-				bucket, err = cluster.OpenBucket("endpoints", "")
+				bucket, err := cluster.OpenBucket("endpoints", "")
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to connect" +
@@ -937,15 +888,14 @@ func main() {
 		}
 	})
 	r.POST("/update-endpoint", func(c *gin.Context) {
-		var json EndpointCRUD
-		var document EndpointDoc
-		var db_document EndpointDoc
-		var err error
+		var json endpoint.EndpointCRUD
+		var document endpoint.EndpointDoc
+		var db_document endpoint.EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			owner, _ := checkOwner(authUser, json.DomainID)
 			if (authed == true) && (owner == true) {
-				bucket, err = cluster.OpenBucket("endpoints", "")
+				bucket, err := cluster.OpenBucket("endpoints", "")
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to connect" +
@@ -987,14 +937,13 @@ func main() {
 		}
 	})
 	r.POST("/insert", func(c *gin.Context) {
-		var json DataCRUD
-		var endpoint_doc EndpointDoc
+		var json endpoint.DataCRUD
+		var endpoint_doc endpoint.EndpointDoc
 		var bucket_check bool
-		var err error
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			if authed == true {
-				bucket, err = cluster.OpenBucket("endpoints", "")
+				bucket, err := cluster.OpenBucket("endpoints", "")
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to open endpoints bucket!",
@@ -1066,13 +1015,12 @@ func main() {
 		}
 	})
 	r.POST("/update", func(c *gin.Context) {
-		var err error
-		var json DataCRUD
-		var endpoint_doc EndpointDoc
+		var json endpoint.DataCRUD
+		var endpoint_doc endpoint.EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			if authed == true {
-				bucket, err = cluster.OpenBucket("endpoints", "")
+				bucket, err := cluster.OpenBucket("endpoints", "")
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to open endpoints bucket!",
@@ -1128,13 +1076,12 @@ func main() {
 		}
 	})
 	r.POST("/delete", func(c *gin.Context) {
-		var json DataCRUD
-		var endpoint_doc EndpointDoc
-		var err error
+		var json endpoint.DataCRUD
+		var endpoint_doc endpoint.EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			if authed == true {
-				bucket, err = cluster.OpenBucket("endpoints", "")
+				bucket, err := cluster.OpenBucket("endpoints", "")
 				bucket_id := json.DomainID + json.ID
 				if err != nil {
 					c.JSON(402, gin.H{
@@ -1189,14 +1136,13 @@ func main() {
 		}
 	})
 	r.POST("/get", func(c *gin.Context) {
-		var json DataCRUD
-		var endpoint_doc EndpointDoc
-		var err error
+		var json endpoint.DataCRUD
+		var endpoint_doc endpoint.EndpointDoc
 		var data_blob interface{}
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			if authed == true {
-				bucket, err = cluster.OpenBucket("endpoints", "")
+				bucket, err := cluster.OpenBucket("endpoints", "")
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to open endpoints bucket!",
@@ -1259,14 +1205,14 @@ func main() {
 		}
 	})
 	r.POST("/create-domain", func(c *gin.Context) {
-		var json DomainCRUD
-		var user_doc UserDoc
+		var json endpoint.DomainCRUD
+		var userDoc endpoint.UserDoc
 		var err error
 		err = c.BindJSON(&json)
 		if err == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			if authed == true {
-				bucket, err = cluster.OpenBucket("users", "")
+				bucket, err := cluster.OpenBucket("users", "")
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to connect" +
@@ -1275,7 +1221,7 @@ func main() {
 					})
 					return
 				}
-				_, err = bucket.Get(authUser, &user_doc)
+				_, err = bucket.Get(authUser, &userDoc)
 				if err != nil {
 					c.JSON(402, gin.H{
 						"message": "unable to retrieve" +
@@ -1284,13 +1230,13 @@ func main() {
 					})
 					return
 				}
-				user_doc.Domains = append(user_doc.Domains,
-					DomainDoc{
+				userDoc.Domains = append(userDoc.Domains,
+					endpoint.DomainDoc{
 						DomainID:  json.DomainID,
 						Owner:     true,
-						Endpoints: []DomainEndpointsDoc{},
+						Endpoints: []endpoint.DomainEndpointsDoc{},
 					})
-				_, err = bucket.Replace(authUser, &user_doc,
+				_, err = bucket.Replace(authUser, &userDoc,
 					0, 0)
 				if err != nil {
 					c.JSON(402, gin.H{
@@ -1300,7 +1246,7 @@ func main() {
 					})
 					return
 				}
-				c.JSON(200, user_doc)
+				c.JSON(200, userDoc)
 			}
 		} else {
 			c.JSON(401, gin.H{
@@ -1309,7 +1255,7 @@ func main() {
 		}
 	})
 	r.POST("/update-user-permissions", func(c *gin.Context) {
-		var json UserPermissionsDoc
+		var json endpoint.UserPermissionsDoc
 		var err error
 		err = c.BindJSON(&json)
 		if err != nil {
@@ -1340,7 +1286,7 @@ func main() {
 		})
 	})
 	r.POST("/delete-user-permissions", func(c *gin.Context) {
-		var json UserPermissionsDoc
+		var json endpoint.UserPermissionsDoc
 		var err error
 		err = c.BindJSON(&json)
 		if err != nil {
@@ -1376,8 +1322,8 @@ func main() {
 		})
 	})
 	r.POST("/get-endpoints", func(c *gin.Context) {
-		var login_form TokenDoc
-		var user_doc UserDoc
+		var login_form endpoint.TokenDoc
+		var userDoc endpoint.UserDoc
 		var err error
 		err = c.BindJSON(&login_form)
 		if err != nil {
@@ -1394,7 +1340,7 @@ func main() {
 			})
 			return
 		}
-		bucket, err = cluster.OpenBucket("users", "")
+		bucket, err := cluster.OpenBucket("users", "")
 		if err != nil {
 			c.JSON(402, gin.H{
 				"message": "request failed, unable to" +
@@ -1404,7 +1350,7 @@ func main() {
 			return
 		}
 
-		_, err = bucket.Get(user, &user_doc)
+		_, err = bucket.Get(user, &userDoc)
 		if err != nil {
 			c.JSON(402, gin.H{
 				"message": "request failed, unable to" +
@@ -1413,7 +1359,7 @@ func main() {
 			})
 			return
 		}
-		c.JSON(200, user_doc.Domains)
+		c.JSON(200, userDoc.Domains)
 	})
 	r.Run(":8000")
 }
