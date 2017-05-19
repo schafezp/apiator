@@ -134,7 +134,7 @@ func SolrSearchEndpoint(id, domainId, searchString string)(interface{},error){
 	endpointBucketName := strings.Replace(id, "/", "-", -1)
 	endpointBucketName = domainId + endpointBucketName
 	
-	qstring := fmt.Sprintf("EndpointBucketName:%s,Doc:",endpointBucketName,searchString)
+	qstring := fmt.Sprintf("EndpointBucketName:%s AND Doc:*%s*",endpointBucketName,searchString)
 	
 	q := solr.Query{
 		Params: solr.URLParamMap{
