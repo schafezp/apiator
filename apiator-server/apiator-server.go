@@ -135,7 +135,7 @@ type DataCRUD struct {
 
 type UserCRUD struct {
 	ID    string  `json:"id" binding:"required"`
-	Token string  `json:"token" binding"required"`
+	Token string  `json:"token" binding:"required"`
 	Doc   UserDoc `json:"document"`
 }
 
@@ -152,7 +152,7 @@ type DomainDoc struct {
 
 type DomainEndpointsDoc struct {
 	Name        string `json:"name" binding:"required"`
-	Permissions int    `json:"permissions" binding"required"`
+	Permissions int    `json:"permissions" binding:"required"`
 }
 
 type DomainCRUD struct {
@@ -162,7 +162,7 @@ type DomainCRUD struct {
 
 type UserPermissionsDoc struct {
 	ID          string `json:"id" binding:"required"`
-	Token       string `json:"token" binding"required"`
+	Token       string `json:"token" binding:"required"`
 	DomainID    string `json:"domain_id" binding:"required"`
 	Permissions int    `json:"permissions"`
 	Username    string `json:"username" binding:"required"`
