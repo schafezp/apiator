@@ -29,11 +29,10 @@ var (
 )
 
 const (
-	couchbaseServerAddr = "localhost:8091"
-	solrServerAddr      = "127.0.0.1:8983"
-	redisServerAddr     = "localhost:6379"
-	redisServerPassword = ""
-	solrServerHost      = "localhost"
+	couchbaseServerAddr = "csse433-apiator.csse.rose-hulman.edu:8091"
+	redisServerAddr     = "apiator-3.csse.rose-hulman.edu:6379"
+	redisServerPassword = "AK1lTOuHyUNT5sN4JHP7"
+	solrServerHost      = "apiator-2.csse.rose-hulman.edu"
 	solrServerPort      = 8983
 	solrCoreName        = "gettingstarted"
 )
@@ -426,7 +425,35 @@ func updateUserEndpoints(username string, domain string, endpoint string, permis
 					return nil
 				}
 			}
+			endpoints = append(endpoints, DomainEndpointsDoc{
+				Name:        endpoint,
+				Permissions: permissions,
+			})
+			domain_doc.Endpoints = endpoints
+			user_doc.Domains[index].Endpoints = domain_doc.Endpoints
+			_, err = bucket.Replace(username, &user_doc,
+				0, 0)
+			if err != nil {
+				return err
+			}
+			return nil
 		}
+	}
+	domains = append(domains, DomainDoc{
+		DomainID: domain,
+		Owner:    false,
+		Endpoints: []DomainEndpointsDoc{
+			DomainEndpointsDoc{
+				Name:        endpoint,
+				Permissions: permissions,
+			},
+		},
+	})
+	user_doc.Domains = domains
+	_, err = bucket.Replace(username, &user_doc,
+		0, 0)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -470,7 +497,10 @@ func bucketInsert(bucket *gocb.Bucket, document interface{}, id string) error {
 
 // Use document.Username as key always
 func userBucketInsert(bucket *gocb.Bucket, document Login) error {
-	_, err := bucket.Insert(document.Username, document, 0)
+	var json UserDoc
+	json.Password = document.Password
+	json.Domains = make([]DomainDoc, 0)
+	_, err := bucket.Insert(document.Username, json, 0)
 	return err
 }
 
@@ -593,11 +623,9 @@ func solrInsertEndpoint(endpoint *EndpointDoc) (bool, error) {
 
 func main() {
 	var bucketerror error
-	var geterror error
-	var connecterror error
 	//start sync dbs asap
 	go syncdbs()
-	cluster, connecterror = gocb.Connect(couchbaseServerAddr)
+	cluster, _ = gocb.Connect(couchbaseServerAddr)
 	r := gin.Default()
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -680,7 +708,7 @@ func main() {
 		})
 	})
 	r.GET("/solr/ping", func(c *gin.Context) {
-		resp, err := http.Get(solrServerAddr + "/solr/admin/ping")
+		resp, err := http.Get(solrServerHost + "/solr/admin/ping")
 		if err != nil {
 			panic(err)
 		}
@@ -739,6 +767,7 @@ func main() {
 		if bucketerror != nil {
 			c.JSON(402, gin.H{
 				"message": "request failed, unable to open couchbase bucket",
+				"error":   bucketerror.Error(),
 			})
 		}
 		var form Login
@@ -773,6 +802,7 @@ func main() {
 
 	})
 	r.POST("/auth", func(c *gin.Context) {
+		var err error
 		bucket, err = cluster.OpenBucket("users", "")
 		if err != nil {
 			c.JSON(402, gin.H{
@@ -838,6 +868,7 @@ func main() {
 		}
 	})
 	r.POST("/create-endpoint", func(c *gin.Context) {
+		var err error
 		var json EndpointCRUD
 		var document EndpointDoc
 		err = c.BindJSON(&json)
@@ -873,7 +904,7 @@ func main() {
 		document = json.Doc
 		document.Owner = user
 		document.CreatedAt = time.Now().Format(time.RFC3339)
-		_, err = bucketInsert(bucket, document, bucket_id)
+		err = bucketInsert(bucket, document, bucket_id)
 		if err != nil {
 			c.JSON(402, gin.H{
 				"message": "failed to insert" +
@@ -894,6 +925,7 @@ func main() {
 	r.POST("/get-endpoint", func(c *gin.Context) {
 		var json EndpointCRUD
 		var document EndpointDoc
+		var err error
 		err = c.BindJSON(&json)
 		if err == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
@@ -931,6 +963,7 @@ func main() {
 	})
 	r.POST("/delete-endpoint", func(c *gin.Context) {
 		var json EndpointCRUD
+		var err error
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			owner, _ := checkOwner(authUser, json.DomainID)
@@ -966,6 +999,7 @@ func main() {
 		var json EndpointCRUD
 		var document EndpointDoc
 		var db_document EndpointDoc
+		var err error
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			owner, _ := checkOwner(authUser, json.DomainID)
@@ -1013,7 +1047,6 @@ func main() {
 		var endpoint_doc EndpointDoc
 		var bucket_check bool
 		var err error
-		var clusterManager *gocb.ClusterManager
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			if authed == true {
@@ -1084,8 +1117,9 @@ func main() {
 		}
 	})
 	r.POST("/update", func(c *gin.Context) {
+		var err error
 		var json DataCRUD
-		var endpointDoc EndpointDoc
+		var endpoint_doc EndpointDoc
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			if authed == true {
@@ -1142,7 +1176,8 @@ func main() {
 	})
 	r.POST("/delete", func(c *gin.Context) {
 		var json DataCRUD
-		var endpointDoc EndpointDoc
+		var endpoint_doc EndpointDoc
+		var err error
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			if authed == true {
@@ -1198,7 +1233,8 @@ func main() {
 	})
 	r.POST("/get", func(c *gin.Context) {
 		var json DataCRUD
-		var endpointDoc EndpointDoc
+		var endpoint_doc EndpointDoc
+		var err error
 		var data_blob interface{}
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
@@ -1263,6 +1299,7 @@ func main() {
 	r.POST("/create-domain", func(c *gin.Context) {
 		var json DomainCRUD
 		var user_doc UserDoc
+		var err error
 		err = c.BindJSON(&json)
 		if err == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
@@ -1308,6 +1345,7 @@ func main() {
 	})
 	r.POST("/update-user-permissions", func(c *gin.Context) {
 		var json UserPermissionsDoc
+		var err error
 		err = c.BindJSON(&json)
 		if err != nil {
 			c.JSON(401, gin.H{
@@ -1321,7 +1359,7 @@ func main() {
 				"message": "unauthorized user!",
 			})
 		}
-		err = updateUserEndpoints(user, json.DomainID, json.ID, 7)
+		err = updateUserEndpoints(json.Username, json.DomainID, json.ID, json.Permissions)
 		if err != nil {
 			c.JSON(402, gin.H{
 				"message": "failed to update" +
@@ -1335,6 +1373,7 @@ func main() {
 	})
 	r.POST("/delete-user-permissions", func(c *gin.Context) {
 		var json UserPermissionsDoc
+		var err error
 		err = c.BindJSON(&json)
 		if err != nil {
 			c.JSON(401, gin.H{
@@ -1348,7 +1387,7 @@ func main() {
 				"message": "unauthorized user!",
 			})
 		}
-		err = deleteUserEndpoints(user, json.DomainID, json.ID)
+		err = deleteUserEndpoints(json.Username, json.DomainID, json.ID)
 		if err != nil {
 			c.JSON(402, gin.H{
 				"message": "failed to delete" +
