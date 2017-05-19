@@ -133,14 +133,14 @@ type DataCRUD struct {
 }
 
 type UserCRUD struct {
-	ID    string  `json:"id" binding:"required"`
+	ID    string  `json:"id"`
 	Token string  `json:"token" binding:"required"`
 	Doc   UserDoc `json:"document"`
 }
 
 type UserDoc struct {
 	Domains  []DomainDoc `json:"domains" binding:"required"`
-	Password string      `json:"password" binding:"required"`
+	Password string      `json:"password"`
 }
 
 type DomainDoc struct {
@@ -165,6 +165,10 @@ type UserPermissionsDoc struct {
 	DomainID    string `json:"domain_id" binding:"required"`
 	Permissions int    `json:"permissions"`
 	Username    string `json:"username" binding:"required"`
+}
+
+type TokenDoc struct {
+	Token string `json:"token" binding:"required"`
 }
 
 func HashPassword(password string) (string, error) {
@@ -1403,6 +1407,42 @@ func main() {
 		c.JSON(200, gin.H{
 			"message": "Woohoo!",
 		})
+	})
+	r.POST("/get-endpoints", func(c *gin.Context) {
+		var login_form TokenDoc
+		var user_doc UserDoc
+		var err error
+		err = c.BindJSON(&login_form)
+		if err != nil {
+			c.JSON(400, gin.H{
+				"message": "error binding JSON to variable",
+				"error":   err.Error(),
+			})
+		}
+		authed, user := decodeAuthUserOrFail(login_form.Token)
+		if authed == false {
+			c.JSON(401, gin.H{
+				"message": "unauthorized user!",
+			})
+		}
+		bucket, err = cluster.OpenBucket("users", "")
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to" +
+					"open couchbase bucket",
+				"error": err.Error(),
+			})
+		}
+
+		_, err = bucket.Get(user, &user_doc)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to" +
+					"retrieve user info",
+				"error": err.Error(),
+			})
+		}
+		c.JSON(200, user_doc.Domains)
 	})
 	r.Run(":8000")
 }
