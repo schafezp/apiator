@@ -25,7 +25,7 @@ func AddMissCount(domain, endpoint string) error {
 		return err
 	}
 	json.Statistics.MissCount++
-	json.Statistics.HitRate = float32(json.Statistics.HitCount / (json.Statistics.HitCount + json.Statistics.MissCount))
+	json.Statistics.HitRate = float32(json.Statistics.HitCount) / float32(json.Statistics.HitCount+json.Statistics.MissCount)
 	_, err = bucket.Replace(bucketID, &json, 0, 0)
 	return err
 }
@@ -42,7 +42,7 @@ func AddHitCount(domain, endpoint string) error {
 		return err
 	}
 	json.Statistics.HitCount++
-	json.Statistics.HitRate = float32(json.Statistics.HitCount / (json.Statistics.HitCount + json.Statistics.MissCount))
+	json.Statistics.HitRate = float32(json.Statistics.HitCount) / float32(json.Statistics.HitCount+json.Statistics.MissCount)
 	_, err = bucket.Replace(bucketID, &json, 0, 0)
 	return err
 }
