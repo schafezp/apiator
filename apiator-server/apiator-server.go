@@ -160,6 +160,14 @@ type DomainCRUD struct {
 	DomainID string `json:"domain_id" binding:"required"`
 }
 
+type UserPermissionsDoc struct {
+	ID          string `json:"id" binding:"required"`
+	Token       string `json:"token" binding"required"`
+	DomainID    string `json:"domain_id" binding:"required"`
+	Permissions int    `json:"permissions"`
+	Username    string `json:"username" binding:"required"`
+}
+
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
 	return string(bytes), err
@@ -284,8 +292,9 @@ func retrieveUserTokenRedis(username string) (string, error) {
 	return val, err
 }
 
-func checkReadPermission(username, domain, endpoint string) (bool, error) {
+func checkEndpointPermission(username string, domain string, endpoint string, permission int) (bool, error) {
 	var user_doc UserDoc
+	var err error
 	bucket, err = cluster.OpenBucket("users", "")
 	if err != nil {
 		return false, err
@@ -300,31 +309,7 @@ func checkReadPermission(username, domain, endpoint string) (bool, error) {
 			endpoints := domain_doc.Endpoints
 			for _, endpoint_doc := range endpoints {
 				if endpoint == endpoint_doc.Name {
-					return endpoint_doc.Permissions&1 > 0, nil
-				}
-			}
-		}
-	}
-	return false, nil
-}
-
-func checkWritePermission(username, domain, endpoint string) (bool, error) {
-	var user_doc UserDoc
-	bucket, err = cluster.OpenBucket("users", "")
-	if err != nil {
-		return false, err
-	}
-	_, err = bucket.Get(username, &user_doc)
-	domains := user_doc.Domains
-	if err != nil {
-		return false, err
-	}
-	for _, domain_doc := range domains {
-		if domain_doc.DomainID == domain {
-			endpoints := domain_doc.Endpoints
-			for _, endpoint_doc := range endpoints {
-				if endpoint == endpoint_doc.Name {
-					return endpoint_doc.Permissions&2 > 0, nil
+					return endpoint_doc.Permissions&permission > 0, nil
 				}
 			}
 		}
@@ -334,6 +319,7 @@ func checkWritePermission(username, domain, endpoint string) (bool, error) {
 
 func checkOwner(username, domain string) (bool, error) {
 	var user_doc UserDoc
+	var err error
 	bucket, err = cluster.OpenBucket("users", "")
 	if err != nil {
 		return false, err
@@ -353,6 +339,7 @@ func checkOwner(username, domain string) (bool, error) {
 
 func createBucket(bucket_name string) (bool, error) {
 	var cluster_manager *gocb.ClusterManager
+	var err error
 	cluster_manager = cluster.Manager("Administrator", "password")
 	err = cluster_manager.InsertBucket(&gocb.BucketSettings{
 		FlushEnabled:  false,
@@ -363,38 +350,115 @@ func createBucket(bucket_name string) (bool, error) {
 		Replicas:      1,
 		Type:          gocb.BucketType(0),
 	})
-	if err == nil {
-		return true, nil
+	if err != nil {
+		return false, err
 	}
-	return false, err
+	verified := false
+	for !verified {
+		bucket, err = cluster.OpenBucket(bucket_name, "")
+		if err == nil {
+			verified = true
+		}
+	}
+	return verified, nil
 }
 
-func updateUserEndpoints(username, domain, endpoint string) error {
+func createUserEndpoints(username, domain, endpoint string) error {
 	var user_doc UserDoc
+	var err error
 	bucket, err = cluster.OpenBucket("users", "")
 	if err != nil {
 		return err
 	}
 	_, err = bucket.Get(username, &user_doc)
-	domains := user_doc.Domains
 	if err != nil {
 		return err
 	}
+	domains := user_doc.Domains
 	for index, domain_doc := range domains {
 		if domain_doc.DomainID == domain {
 			endpoints := domain_doc.Endpoints
 			domain_doc.Endpoints = append(endpoints,
 				DomainEndpointsDoc{
 					Name:        endpoint,
-					Permissions: 3,
+					Permissions: 7,
 				})
 			user_doc.Domains[index].Endpoints = domain_doc.Endpoints
+			_, err = bucket.Replace(username, &user_doc,
+				0, 0)
+			if err != nil {
+				return err
+			}
+			return nil
 		}
 	}
-	_, err = bucket.Replace(username, &user_doc,
-		0, 0)
+	return nil
+}
+
+func updateUserEndpoints(username string, domain string, endpoint string, permissions int) error {
+	var user_doc UserDoc
+	var err error
+	bucket, err = cluster.OpenBucket("users", "")
 	if err != nil {
 		return err
+	}
+	_, err = bucket.Get(username, &user_doc)
+	if err != nil {
+		return err
+	}
+	domains := user_doc.Domains
+	for index, domain_doc := range domains {
+		if domain_doc.DomainID == domain {
+			endpoints := domain_doc.Endpoints
+			for endpoint_index, endpoints_doc := range endpoints {
+				if endpoints_doc.Name == endpoint {
+					endpoints[endpoint_index] = DomainEndpointsDoc{
+						Name:        endpoint,
+						Permissions: permissions,
+					}
+					domain_doc.Endpoints = endpoints
+					user_doc.Domains[index].Endpoints = domain_doc.Endpoints
+					_, err = bucket.Replace(username, &user_doc,
+						0, 0)
+					if err != nil {
+						return err
+					}
+					return nil
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func deleteUserEndpoints(username string, domain string, endpoint string) error {
+	var user_doc UserDoc
+	var err error
+	bucket, err = cluster.OpenBucket("users", "")
+	if err != nil {
+		return err
+	}
+	_, err = bucket.Get(username, &user_doc)
+	if err != nil {
+		return err
+	}
+	domains := user_doc.Domains
+	for index, domain_doc := range domains {
+		if domain_doc.DomainID == domain {
+			endpoints := domain_doc.Endpoints
+			for endpoint_index, endpoints_doc := range endpoints {
+				if endpoints_doc.Name == endpoint {
+					domain_doc.Endpoints = append(endpoints[:endpoint_index], endpoints[endpoint_index+1:]...)
+					user_doc.Domains[index].Endpoints = domain_doc.Endpoints
+					_, err = bucket.Replace(username, &user_doc,
+						0, 0)
+					if err != nil {
+						return err
+					}
+					return nil
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -679,7 +743,6 @@ func main() {
 		}
 		var form Login
 		c.Bind(&form)
-		// username := form.Username
 		hashed, err := HashPassword(form.Password)
 		if err != nil {
 			c.JSON(402, gin.H{
@@ -717,52 +780,50 @@ func main() {
 					"open couchbase bucket",
 				"error": err.Error(),
 			})
-		} else {
-			var form Login
-			c.Bind(&form)
-			username := form.Username
-			password := form.Password
-			var couchpass map[string]interface{}
-			_, err = bucket.Get(username, &couchpass)
-			if err != nil {
-				c.JSON(402, gin.H{
-					"message": "request failed, unable to" +
-						"get item by id: " + username,
-					"error": err.Error(),
-				})
-			}
-
-			match := CheckPasswordHash(password,
-				couchpass["password"].(string))
-			if match == true {
-				//functionally a reset call as well
-				token, _ := createJwtToken(username)
-				err = resetUserTokenRedis(username)
-				if err != nil {
-					c.JSON(403, gin.H{
-						"message": "request failed, unable to" +
-							"reset user token on Redis",
-						"error": err.Error(),
-					})
-				}
-				err = storeUserTokenRedis(username, token)
-				if err != nil {
-					c.JSON(403, gin.H{
-						"message": "request failed, unable to" +
-							"store user token on Redis",
-						"error": err.Error(),
-					})
-				}
-
-				c.JSON(200, gin.H{
-					"token": token,
-				})
-			} else {
-				c.JSON(401, gin.H{
-					"message": "authorization denied",
-				})
-			}
 		}
+		var form Login
+		c.Bind(&form)
+		username := form.Username
+		password := form.Password
+		var couchpass map[string]interface{}
+		_, err = bucket.Get(username, &couchpass)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to" +
+					"get item by id: " + username,
+				"error": err.Error(),
+			})
+		}
+
+		match := CheckPasswordHash(password,
+			couchpass["password"].(string))
+		if match == false {
+			c.JSON(401, gin.H{
+				"message": "authorization denied",
+			})
+		}
+		//functionally a reset call as well
+		token, _ := createJwtToken(username)
+		err = resetUserTokenRedis(username)
+		if err != nil {
+			c.JSON(403, gin.H{
+				"message": "request failed, unable to" +
+					"reset user token on Redis",
+				"error": err.Error(),
+			})
+		}
+		err = storeUserTokenRedis(username, token)
+		if err != nil {
+			c.JSON(403, gin.H{
+				"message": "request failed, unable to" +
+					"store user token on Redis",
+				"error": err.Error(),
+			})
+		}
+
+		c.JSON(200, gin.H{
+			"token": token,
+		})
 	})
 	r.GET("/authed-ping", func(c *gin.Context) {
 		authed, _ := decodeAuthUserOrFail("foo")
@@ -780,55 +841,52 @@ func main() {
 		var json EndpointCRUD
 		var document EndpointDoc
 		err = c.BindJSON(&json)
-		if err == nil {
-			authed, user := decodeAuthUserOrFail(json.Token)
-			owner, _ := checkOwner(user, json.DomainID)
-			if (authed == true) && (owner == true) {
-				bucket, err = cluster.OpenBucket("endpoints",
-					"")
-				if err != nil {
-					c.JSON(402, gin.H{
-						"message": "unable to connect" +
-							" to endpoints bucket",
-						"error": err.Error(),
-					})
-				}
-				bucket_id := json.DomainID + json.ID
-				_, err = bucket.Get(bucket_id, &document)
-				if err == nil {
-					c.JSON(403, gin.H{
-						"message": "endpoint already" +
-							"exists!",
-					})
-				}
-				document = json.Doc
-				document.Owner = user
-				document.CreatedAt = time.Now().Format(time.RFC3339)
-				_, err = bucket.Insert(bucket_id, document, 0)
-				if err != nil {
-					c.JSON(402, gin.H{
-						"message": "failed to insert" +
-							"endpoint" + bucket_id,
-						"error": err.Error(),
-					})
-				}
-				err = updateUserEndpoints(user, json.DomainID, json.ID)
-				if err != nil {
-					c.JSON(402, gin.H{
-						"message": "failed to update" +
-							"user endpoints",
-						"error": err.Error(),
-					})
-				}
-			} else {
-				c.JSON(401, gin.H{
-					"message": "unauthorized user!",
-				})
-			}
-		} else {
+		if err != nil {
 			c.JSON(400, gin.H{
 				"message": "error binding JSON to variable",
 				"error":   err.Error(),
+			})
+		}
+		authed, user := decodeAuthUserOrFail(json.Token)
+		owner, _ := checkOwner(user, json.DomainID)
+		if (authed == false) || (owner == false) {
+			c.JSON(401, gin.H{
+				"message": "unauthorized user!",
+			})
+		}
+		bucket, err = cluster.OpenBucket("endpoints", "")
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "unable to connect" +
+					" to endpoints bucket",
+				"error": err.Error(),
+			})
+		}
+		bucket_id := json.DomainID + json.ID
+		_, err = bucket.Get(bucket_id, &document)
+		if err == nil {
+			c.JSON(403, gin.H{
+				"message": "endpoint already" +
+					"exists!",
+			})
+		}
+		document = json.Doc
+		document.Owner = user
+		document.CreatedAt = time.Now().Format(time.RFC3339)
+		_, err = bucketInsert(bucket, document, bucket_id)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "failed to insert" +
+					"endpoint" + bucket_id,
+				"error": err.Error(),
+			})
+		}
+		err = createUserEndpoints(user, json.DomainID, json.ID)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "failed to update" +
+					"user endpoints",
+				"error": err.Error(),
 			})
 		}
 
@@ -974,7 +1032,7 @@ func main() {
 						"error":   err.Error(),
 					})
 				}
-				if valid, _ := checkWritePermission(authUser, json.DomainID, json.ID); valid {
+				if valid, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 2); valid {
 					var endpoint_bucket_name string
 					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
 					endpoint_bucket_name = json.DomainID + endpoint_bucket_name
@@ -1046,8 +1104,8 @@ func main() {
 						"error":   err.Error(),
 					})
 				}
-				has_write_permission, _ := checkWritePermission(authUser, json.DomainID, json.ID)
-				has_read_permission, _ := checkReadPermission(authUser, json.DomainID, json.ID)
+				has_write_permission, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 2)
+				has_read_permission, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 1)
 				if (has_write_permission == true) && (has_read_permission == true) {
 					var endpoint_bucket_name string
 					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
@@ -1103,7 +1161,7 @@ func main() {
 						"error":   err.Error(),
 					})
 				}
-				has_write_permission, _ := checkWritePermission(authUser, json.DomainID, json.ID)
+				has_write_permission, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 2)
 				if has_write_permission == true {
 					var endpoint_bucket_name string
 					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
@@ -1160,7 +1218,7 @@ func main() {
 						"error":   err.Error(),
 					})
 				}
-				if valid, _ := checkReadPermission(authUser, json.DomainID, json.ID); valid {
+				if valid, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 1); valid {
 					var endpoint_bucket_name string
 					endpoint_bucket_name = strings.Replace(json.ID, "/", "-", -1)
 					endpoint_bucket_name = json.DomainID + endpoint_bucket_name
@@ -1247,6 +1305,65 @@ func main() {
 				"message": "Error binding JSON!",
 			})
 		}
+	})
+	r.POST("/update-user-permissions", func(c *gin.Context) {
+		var json UserPermissionsDoc
+		err = c.BindJSON(&json)
+		if err != nil {
+			c.JSON(401, gin.H{
+				"message": "Error binding JSON!",
+			})
+		}
+		authed, authUser := decodeAuthUserOrFail(json.Token)
+		owner, _ := checkOwner(authUser, json.DomainID)
+		if (authed == false) || (owner == false) {
+			c.JSON(401, gin.H{
+				"message": "unauthorized user!",
+			})
+		}
+		err = updateUserEndpoints(user, json.DomainID, json.ID, 7)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "failed to update" +
+					"user endpoints",
+				"error": err.Error(),
+			})
+		}
+		c.JSON(200, gin.H{
+			"message": "User permissions updated.",
+		})
+	})
+	r.POST("/delete-user-permissions", func(c *gin.Context) {
+		var json UserPermissionsDoc
+		err = c.BindJSON(&json)
+		if err != nil {
+			c.JSON(401, gin.H{
+				"message": "Error binding JSON!",
+			})
+		}
+		authed, authUser := decodeAuthUserOrFail(json.Token)
+		owner, _ := checkOwner(authUser, json.DomainID)
+		if (authed == false) || (owner == false) {
+			c.JSON(401, gin.H{
+				"message": "unauthorized user!",
+			})
+		}
+		err = deleteUserEndpoints(user, json.DomainID, json.ID)
+		if err != nil {
+			c.JSON(402, gin.H{
+				"message": "failed to delete" +
+					"user endpoints",
+				"error": err.Error(),
+			})
+		}
+		c.JSON(200, gin.H{
+			"message": "User permissions deleted.",
+		})
+	})
+	r.POST("/get-statistics", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"message": "Woohoo!",
+		})
 	})
 	r.Run(":8000")
 }

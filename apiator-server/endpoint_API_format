@@ -4,10 +4,24 @@ AUTH:
 	"password":"issocool"
 }
 
+CREATE-USER:
+{
+	"username":"zach",
+	"password":"issocool"
+}
+
+CHANGE-PASSWORD:
+{
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA2OjIwOjQ4LTA0OjAwIiwidXNlciI6InphY2gifQ.A58s_T0ee1sBqYqOsD02PjvzhnvnsHeXlYGe8CiUEo4",
+	"password":"newpassword"
+}
+
+
 CREATE-ENDPOINT:
 {
 	"id":"/test/endpoint2",
 	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA2OjIwOjQ4LTA0OjAwIiwidXNlciI6InphY2gifQ.A58s_T0ee1sBqYqOsD02PjvzhnvnsHeXlYGe8CiUEo4",
+	"domain_id":"some-domain",
 	"document": {
 		"request_types": [
 			"Get"
@@ -19,12 +33,14 @@ CREATE-ENDPOINT:
 GET-ENDPOINT:
 {
 	"id":"/test/endpoint2",
+	"domain_id":"some-domain",
 	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA2OjIwOjQ4LTA0OjAwIiwidXNlciI6InphY2gifQ.A58s_T0ee1sBqYqOsD02PjvzhnvnsHeXlYGe8CiUEo4"
 }
 
 UPDATE-ENDPOINT:
 {
 	"id":"/test/endpoint2",
+	"domain_id":"some-domain",
 	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA2OjQ3OjE1LTA0OjAwIiwidXNlciI6InphY2gifQ.wC4ssgvMk8mQ9pznzqH3RgzkZXXVjMbdrGxBe4r40lU",
 	"document": {
 		"request_types": [
@@ -39,12 +55,14 @@ UPDATE-ENDPOINT:
 DELETE-ENDPOINT:
 {
 	"id":"/test/endpoint2",
+	"domain_id":"some-domain",
 	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA2OjIwOjQ4LTA0OjAwIiwidXNlciI6InphY2gifQ.A58s_T0ee1sBqYqOsD02PjvzhnvnsHeXlYGe8CiUEo4"
 }
 
 INSERT:
 {
 	"id":"/test/endpoint",
+	"domain_id":"some-domain",
 	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA3OjU5OjAzLTA0OjAwIiwidXNlciI6InphY2gifQ.qmjseAXWk2qK_u0C1SVlUaI_IusTv1Xz-XUt89W6jRk",
 	"document": {
 		"some": "fields"
@@ -55,6 +73,7 @@ INSERT:
 GET:
 {
 	"id":"/test/endpoint",
+	"domain_id":"some-domain",
 	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA3OjU5OjAzLTA0OjAwIiwidXNlciI6InphY2gifQ.qmjseAXWk2qK_u0C1SVlUaI_IusTv1Xz-XUt89W6jRk",
 	"doc_id": "flower-foobar-12345"
 }
@@ -62,6 +81,7 @@ GET:
 UPDATE:
 {
 	"id":"/test/endpoint",
+	"domain_id":"some-domain",
 	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA3OjUxOjQyLTA0OjAwIiwidXNlciI6InphY2gifQ.lsPX3fqLy_x-Ig0Zryri8pMZtC9GrD5oManfhmjzM5g",
 	"document": {
 		"some": "fields",
@@ -73,6 +93,41 @@ UPDATE:
 DELETE:
 {
 	"id":"/test/endpoint",
+	"domain_id":"some-domain",
 	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA3OjUxOjQyLTA0OjAwIiwidXNlciI6InphY2gifQ.lsPX3fqLy_x-Ig0Zryri8pMZtC9GrD5oManfhmjzM5g",
 	"doc_id": "flower-foobar-12345"
 }
+
+CREATE-DOMAIN:
+{
+	"domain_id":"some-domain",
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA3OjUxOjQyLTA0OjAwIiwidXNlciI6InphY2gifQ.lsPX3fqLy_x-Ig0Zryri8pMZtC9GrD5oManfhmjzM5g",
+}
+
+UPDATE-USER-PERMISSIONS:
+{
+	"domain_id":"some-domain",
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA3OjUxOjQyLTA0OjAwIiwidXNlciI6InphY2gifQ.lsPX3fqLy_x-Ig0Zryri8pMZtC9GrD5oManfhmjzM5g",
+	"id":"/test/endpoint2",
+	"permissions": 3
+}
+
+DELETE-USER-PERMISSIONS:
+{
+	"domain_id":"some-domain",
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA3OjUxOjQyLTA0OjAwIiwidXNlciI6InphY2gifQ.lsPX3fqLy_x-Ig0Zryri8pMZtC9GrD5oManfhmjzM5g",
+	"id":"/test/endpoint2"
+}
+
+GET-STATISTICS:
+{
+	"domain_id":"some-domain",
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA2OjIwOjQ4LTA0OjAwIiwidXNlciI6InphY2gifQ.A58s_T0ee1sBqYqOsD02PjvzhnvnsHeXlYGe8CiUEo4",
+	"id":"/test/endpoint2"
+}
+
+GET-ENDPOINTS:
+{
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDE3LTA0LTI4VDA2OjIwOjQ4LTA0OjAwIiwidXNlciI6InphY2gifQ.A58s_T0ee1sBqYqOsD02PjvzhnvnsHeXlYGe8CiUEo4"
+}
+
