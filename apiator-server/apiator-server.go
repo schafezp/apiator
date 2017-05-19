@@ -521,6 +521,35 @@ func main() {
 			})
 		}
 	})
+	r.GET("/solr/search/:id/:domainid/:search", func(c *gin.Context) {
+		var id = c.Param("id")
+		var domainid = c.Param("domainid")
+		var search = c.Param("search")
+
+		_,err := dbsolr.SolrSearchEndpoint(id,domainid,search)
+		if err != nil{c.JSON(400, gin.H{"error searching solr": err,})
+			return}
+
+
+		c.JSON(200, gin.H{
+			"id": id,
+			"domainid": domainid,
+			"search":search,
+		})
+		
+		
+		// results, err := dbsolr.SolrRetrieveUsers(username)
+
+		// if err != nil {
+		// 	c.JSON(400, gin.H{
+		// 		"error retrieve users": results,
+		// 	})
+		// } else {
+		// 	c.JSON(200, gin.H{
+		// 		"users": results,
+		// 	})
+		// }
+	})
 	r.POST("/solr/insertuser", func(c *gin.Context) {
 
 		var form structs.Login
@@ -1019,6 +1048,7 @@ func main() {
 			})
 		}
 	})
+	
 	r.POST("/update", func(c *gin.Context) {
 		var json structs.DataCRUD
 		var endpoint_doc structs.EndpointDoc
