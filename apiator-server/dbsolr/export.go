@@ -9,7 +9,7 @@ import ("github.com/rtt/Go-Solr"
 import (
 	"../config"
 	//TODO: don't import apiator-server for EndpointDoc: instead make separate package
-	"../endpoint"
+	"../structs"
 
 )
 
@@ -68,7 +68,7 @@ func SolrRetrieveUsers(username string)(interface{},error){
 	}
 	return results,nil
 }
-func SolrInsertUser(user *endpoint.Login)(bool,error){
+func SolrInsertUser(user *structs.Login)(bool,error){
 	var resp *solr.UpdateResponse
 	var err error;
 	s, err := solr.Init(conf.SolrServerHost, conf.SolrServerPort, conf.SolrCoreName)
@@ -91,7 +91,7 @@ func SolrInsertUser(user *endpoint.Login)(bool,error){
 		return resp.Success,err
 }
 }
-func SolrInsertEndpoint(endpoint *endpoint.EndpointDoc)(bool,error){
+func SolrInsertEndpoint(endpoint *structs.EndpointDoc)(bool,error){
 	var resp *solr.UpdateResponse
 	var err error;
 	s, err := solr.Init(conf.SolrServerHost, conf.SolrServerPort, conf.SolrCoreName)
