@@ -14,9 +14,6 @@ import (
 	"time"
 )
 
-//investigate if these structs can be pulled into a constants.h type interface
-//similar to C
-
 // func handleCouchbaseError()
 var (
 	jwtSecret         = []byte("KHOzH8DJRHIPfC9Mq8yH")
@@ -398,6 +395,12 @@ func createUserEndpoints(username, domain, endpoint string) error {
 	return nil
 }
 
+func removeEndpointFromStatistics(bucket *gocb.Bucket, bucket_id string) error {
+	var err error
+	_, err = bucket.Remove(bucket_id, 0)
+	return err
+}
+
 func updateUserEndpoints(username string, domain string, endpoint string, permissions int) error {
 	var user_doc UserDoc
 	var err error
@@ -773,6 +776,7 @@ func main() {
 				"message": "request failed, unable to open couchbase bucket",
 				"error":   bucketerror.Error(),
 			})
+			return
 		}
 		var form Login
 		c.Bind(&form)
@@ -781,6 +785,7 @@ func main() {
 			c.JSON(402, gin.H{
 				"message": "request failed, unable to hash password",
 			})
+			return
 		}
 
 		form.Password = hashed
@@ -790,6 +795,7 @@ func main() {
 				"message": "request failed, unable to insert to couchbase bucket",
 				"err":     err,
 			})
+			return
 		}
 		_, err = solrInsertUser(&form)
 		if err != nil {
@@ -797,13 +803,39 @@ func main() {
 				"message": "request failed, unable to insert to couchbase bucket",
 				"err":     err,
 			})
+			return
 		}
 
 		c.JSON(200, gin.H{
 			"message": "insert successful",
 			"err":     err,
 		})
-
+	})
+	r.POST("/delete-user", func(c *gin.Context) {
+		var err error
+		bucket, bucketerror = cluster.OpenBucket("users", "")
+		if bucketerror != nil {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to open couchbase bucket",
+				"error":   bucketerror.Error(),
+			})
+			return
+		}
+		var form TokenDoc
+		c.Bind(&form)
+		authed, user := decodeAuthUserOrFail(form.Token)
+		if authed == false {
+			c.JSON(402, gin.H{
+				"message": "request failed, unable to open couchbase bucket",
+				"error":   bucketerror.Error(),
+			})
+			return
+		}
+		_, err = bucket.Remove(user, 0)
+		c.JSON(200, gin.H{
+			"message": "insert successful",
+			"err":     err,
+		})
 	})
 	r.POST("/auth", func(c *gin.Context) {
 		var err error
@@ -814,6 +846,7 @@ func main() {
 					"open couchbase bucket",
 				"error": err.Error(),
 			})
+			return
 		}
 		var form Login
 		c.Bind(&form)
@@ -827,6 +860,7 @@ func main() {
 					"get item by id: " + username,
 				"error": err.Error(),
 			})
+			return
 		}
 
 		match := CheckPasswordHash(password,
@@ -835,6 +869,7 @@ func main() {
 			c.JSON(401, gin.H{
 				"message": "authorization denied",
 			})
+			return
 		}
 		//functionally a reset call as well
 		token, _ := createJwtToken(username)
@@ -845,6 +880,7 @@ func main() {
 					"reset user token on Redis",
 				"error": err.Error(),
 			})
+			return
 		}
 		err = storeUserTokenRedis(username, token)
 		if err != nil {
@@ -853,6 +889,7 @@ func main() {
 					"store user token on Redis",
 				"error": err.Error(),
 			})
+			return
 		}
 
 		c.JSON(200, gin.H{
@@ -881,6 +918,7 @@ func main() {
 				"message": "error binding JSON to variable",
 				"error":   err.Error(),
 			})
+			return
 		}
 		authed, user := decodeAuthUserOrFail(json.Token)
 		owner, _ := checkOwner(user, json.DomainID)
@@ -888,6 +926,7 @@ func main() {
 			c.JSON(401, gin.H{
 				"message": "unauthorized user!",
 			})
+			return
 		}
 		bucket, err = cluster.OpenBucket("endpoints", "")
 		if err != nil {
@@ -896,6 +935,7 @@ func main() {
 					" to endpoints bucket",
 				"error": err.Error(),
 			})
+			return
 		}
 		bucket_id := json.DomainID + json.ID
 		_, err = bucket.Get(bucket_id, &document)
@@ -904,6 +944,7 @@ func main() {
 				"message": "endpoint already" +
 					"exists!",
 			})
+			return
 		}
 		document = json.Doc
 		document.Owner = user
@@ -915,6 +956,7 @@ func main() {
 					"endpoint" + bucket_id,
 				"error": err.Error(),
 			})
+			return
 		}
 		err = createUserEndpoints(user, json.DomainID, json.ID)
 		if err != nil {
@@ -923,6 +965,7 @@ func main() {
 					"user endpoints",
 				"error": err.Error(),
 			})
+			return
 		}
 
 	})
@@ -943,6 +986,7 @@ func main() {
 							" to endpoints bucket",
 						"error": err.Error(),
 					})
+					return
 				}
 				_, err = bucket.Get(bucket_id, &document)
 				if err != nil {
@@ -951,6 +995,7 @@ func main() {
 							"endpoint" + bucket_id,
 						"error": err.Error(),
 					})
+					return
 				}
 				c.JSON(200, document)
 			} else {
@@ -967,7 +1012,9 @@ func main() {
 	})
 	r.POST("/delete-endpoint", func(c *gin.Context) {
 		var json EndpointCRUD
+		var cluster_manager *gocb.ClusterManager
 		var err error
+		cluster_manager = cluster.Manager("Administrator", "password")
 		if c.BindJSON(&json) == nil {
 			authed, authUser := decodeAuthUserOrFail(json.Token)
 			owner, _ := checkOwner(authUser, json.DomainID)
@@ -979,6 +1026,7 @@ func main() {
 							" to endpoints bucket",
 						"error": err.Error(),
 					})
+					return
 				}
 				bucket_id := json.DomainID + json.ID
 				_, err = bucket.Remove(bucket_id, 0)
@@ -988,6 +1036,34 @@ func main() {
 							"endpoint" + bucket_id,
 						"error": err.Error(),
 					})
+					return
+				}
+				err = cluster_manager.RemoveBucket(bucket_id)
+				if err != nil {
+					c.JSON(402, gin.H{
+						"message": "failed to delete associated bucket for " +
+							"endpoint" + bucket_id,
+						"error": err.Error(),
+					})
+					return
+				}
+				bucket, err = cluster.OpenBucket("statistics", "")
+				if err != nil {
+					c.JSON(402, gin.H{
+						"message": "unable to connect" +
+							" to statistics bucket",
+						"error": err.Error(),
+					})
+					return
+				}
+				err = removeEndpointFromStatistics(bucket, bucket_id)
+				if err != nil {
+					c.JSON(402, gin.H{
+						"message": "unable to remove" +
+							" endpoint from statistics bucket",
+						"error": err.Error(),
+					})
+					return
 				}
 				c.JSON(200, gin.H{
 					"message": "document deleted",
@@ -1015,6 +1091,7 @@ func main() {
 							" to endpoints bucket",
 						"error": err.Error(),
 					})
+					return
 				}
 				document = json.Doc
 				bucket_id := json.DomainID + json.ID
@@ -1025,6 +1102,7 @@ func main() {
 							" to endpoints bucket",
 						"error": err.Error(),
 					})
+					return
 				}
 				document.CreatedAt = db_document.CreatedAt
 				document.Owner = db_document.Owner
@@ -1035,6 +1113,7 @@ func main() {
 							"endpoint document:" + bucket_id,
 						"error": err.Error(),
 					})
+					return
 				}
 				c.JSON(200, gin.H{
 					"message": "document updated",
@@ -1060,6 +1139,7 @@ func main() {
 						"message": "unable to open endpoints bucket!",
 						"error":   err.Error(),
 					})
+					return
 				}
 				bucket_id := json.DomainID + json.ID
 				_, err = bucket.Get(bucket_id, &endpoint_doc)
@@ -1068,6 +1148,7 @@ func main() {
 						"message": "unable to fetch endpoint_doc!",
 						"error":   err.Error(),
 					})
+					return
 				}
 				if valid, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 2); valid {
 					var endpoint_bucket_name string
@@ -1083,6 +1164,7 @@ func main() {
 								"message": "unable to open bucket!",
 								"error":   err.Error(),
 							})
+							return
 						}
 					}
 					if bucket_check == true {
@@ -1093,6 +1175,7 @@ func main() {
 							"message": "unable to open bucket!",
 							"error":   err.Error(),
 						})
+						return
 					}
 					_, err = bucket.Insert(json.DocID, json.Doc, 0)
 					if err != nil {
@@ -1100,6 +1183,7 @@ func main() {
 							"message": "unable to insert document!",
 							"error":   err.Error(),
 						})
+						return
 					}
 					c.JSON(200, gin.H{
 						"message": "document inserted",
@@ -1133,6 +1217,7 @@ func main() {
 						"message": "unable to open endpoints bucket!",
 						"error":   err.Error(),
 					})
+					return
 				}
 				bucket_id := json.DomainID + json.ID
 				_, err = bucket.Get(bucket_id, &endpoint_doc)
@@ -1141,6 +1226,7 @@ func main() {
 						"message": "unable to fetch endpoint_doc!",
 						"error":   err.Error(),
 					})
+					return
 				}
 				has_write_permission, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 2)
 				has_read_permission, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 1)
@@ -1154,6 +1240,7 @@ func main() {
 							"message": "unable to open bucket!",
 							"error":   err.Error(),
 						})
+						return
 					}
 					_, err = bucket.Replace(json.DocID, json.Doc, 0, 0)
 					if err != nil {
@@ -1161,6 +1248,7 @@ func main() {
 							"message": "unable to update document!",
 							"error":   err.Error(),
 						})
+						return
 					}
 				} else {
 					c.JSON(401, gin.H{
@@ -1192,6 +1280,7 @@ func main() {
 						"message": "unable to open endpoints bucket!",
 						"error":   err.Error(),
 					})
+					return
 				}
 				_, err = bucket.Get(bucket_id, &endpoint_doc)
 				if err != nil {
@@ -1199,6 +1288,7 @@ func main() {
 						"message": "unable to fetch endpoint_doc!",
 						"error":   err.Error(),
 					})
+					return
 				}
 				has_del_permission, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 4)
 				if has_del_permission == true {
@@ -1211,6 +1301,7 @@ func main() {
 							"message": "unable to open bucket!",
 							"error":   err.Error(),
 						})
+						return
 					}
 					_, err = bucket.Remove(json.DocID, 0)
 					if err != nil {
@@ -1218,6 +1309,7 @@ func main() {
 							"message": "unable to remove document!",
 							"error":   err.Error(),
 						})
+						return
 					}
 				} else {
 					c.JSON(401, gin.H{
@@ -1249,6 +1341,7 @@ func main() {
 						"message": "unable to open endpoints bucket!",
 						"error":   err.Error(),
 					})
+					return
 				}
 				bucket_id := json.DomainID + json.ID
 				_, err = bucket.Get(bucket_id, &endpoint_doc)
@@ -1257,6 +1350,7 @@ func main() {
 						"message": "unable to fetch endpoint_doc!",
 						"error":   err.Error(),
 					})
+					return
 				}
 				if valid, _ := checkEndpointPermission(authUser, json.DomainID, json.ID, 1); valid {
 					var endpoint_bucket_name string
@@ -1268,6 +1362,7 @@ func main() {
 							"message": "unable to open bucket!",
 							"error":   err.Error(),
 						})
+						return
 					}
 					bucket, err = cluster.OpenBucket(endpoint_bucket_name, "")
 					if err != nil {
@@ -1275,6 +1370,7 @@ func main() {
 							"message": "unable to open bucket!",
 							"error":   err.Error(),
 						})
+						return
 					}
 					_, err = bucket.Get(json.DocID, &data_blob)
 					if err != nil {
@@ -1282,6 +1378,7 @@ func main() {
 							"message": "unable to get document!",
 							"error":   err.Error(),
 						})
+						return
 					}
 					c.JSON(200, data_blob)
 				} else {
@@ -1315,6 +1412,7 @@ func main() {
 							" to users bucket",
 						"error": err.Error(),
 					})
+					return
 				}
 				_, err = bucket.Get(authUser, &user_doc)
 				if err != nil {
@@ -1323,6 +1421,7 @@ func main() {
 							"user: " + authUser,
 						"error": err.Error(),
 					})
+					return
 				}
 				user_doc.Domains = append(user_doc.Domains,
 					DomainDoc{
@@ -1338,6 +1437,7 @@ func main() {
 							"user: " + authUser,
 						"error": err.Error(),
 					})
+					return
 				}
 				c.JSON(200, user_doc)
 			}
@@ -1355,6 +1455,7 @@ func main() {
 			c.JSON(401, gin.H{
 				"message": "Error binding JSON!",
 			})
+			return
 		}
 		authed, authUser := decodeAuthUserOrFail(json.Token)
 		owner, _ := checkOwner(authUser, json.DomainID)
@@ -1362,6 +1463,7 @@ func main() {
 			c.JSON(401, gin.H{
 				"message": "unauthorized user!",
 			})
+			return
 		}
 		err = updateUserEndpoints(json.Username, json.DomainID, json.ID, json.Permissions)
 		if err != nil {
@@ -1370,6 +1472,7 @@ func main() {
 					"user endpoints",
 				"error": err.Error(),
 			})
+			return
 		}
 		c.JSON(200, gin.H{
 			"message": "User permissions updated.",
@@ -1383,6 +1486,7 @@ func main() {
 			c.JSON(401, gin.H{
 				"message": "Error binding JSON!",
 			})
+			return
 		}
 		authed, authUser := decodeAuthUserOrFail(json.Token)
 		owner, _ := checkOwner(authUser, json.DomainID)
@@ -1390,6 +1494,7 @@ func main() {
 			c.JSON(401, gin.H{
 				"message": "unauthorized user!",
 			})
+			return
 		}
 		err = deleteUserEndpoints(json.Username, json.DomainID, json.ID)
 		if err != nil {
@@ -1398,6 +1503,7 @@ func main() {
 					"user endpoints",
 				"error": err.Error(),
 			})
+			return
 		}
 		c.JSON(200, gin.H{
 			"message": "User permissions deleted.",
@@ -1418,12 +1524,14 @@ func main() {
 				"message": "error binding JSON to variable",
 				"error":   err.Error(),
 			})
+			return
 		}
 		authed, user := decodeAuthUserOrFail(login_form.Token)
 		if authed == false {
 			c.JSON(401, gin.H{
 				"message": "unauthorized user!",
 			})
+			return
 		}
 		bucket, err = cluster.OpenBucket("users", "")
 		if err != nil {
@@ -1432,6 +1540,7 @@ func main() {
 					"open couchbase bucket",
 				"error": err.Error(),
 			})
+			return
 		}
 
 		_, err = bucket.Get(user, &user_doc)
@@ -1441,6 +1550,7 @@ func main() {
 					"retrieve user info",
 				"error": err.Error(),
 			})
+			return
 		}
 		c.JSON(200, user_doc.Domains)
 	})
